@@ -265,7 +265,7 @@ Acknowledge message
 ```javascript
 router.delete('/tasks/:id', 
   authenticateToken,  // Verify user is logged in
-  isAdmin,            // Check if user has admin role
+  isAdmin,            // Check if staff has admin role
   taskController.deleteTask
 );
 ```

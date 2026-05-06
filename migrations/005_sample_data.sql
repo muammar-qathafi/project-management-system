@@ -8,8 +8,8 @@
 INSERT INTO users (name, email, password, role) VALUES
 ('Admin User', 'admin@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'admin'),
 ('John Manager', 'john.manager@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'manager'),
-('Alice Developer', 'alice@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'user'),
-('Bob Developer', 'bob@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'user');
+('Alice Developer', 'alice@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'staff'),
+('Bob Developer', 'bob@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'staff');
 
 -- ============================================
 -- 2. Insert Sample Projects

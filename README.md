@@ -106,8 +106,8 @@ mysql -u root -p project_management < migrations/001_create_users_table.sql
 > `005_sample_data.sql` menyertakan 4 user sample beserta data task untuk testing:
 > - `admin@example.com` / `password123` (role: admin)
 > - `john.manager@example.com` / `password123` (role: manager)
-> - `alice@example.com` / `password123` (role: user)
-> - `bob@example.com` / `password123` (role: user)
+> - `alice@example.com` / `password123` (role: staff)
+> - `bob@example.com` / `password123` (role: staff)
 
 **5. Jalankan server**
 ```bash
@@ -195,7 +195,7 @@ Tiga role dengan hak akses berbeda:
 |---|---|
 | `admin` | Full access ke semua resource |
 | `manager` | Buat/kelola project & task, tidak bisa hapus user |
-| `user` | Baca data, update task yang di-assign ke dirinya |
+| `staff` | Baca data, update task yang di-assign ke dirinya |
 
 ### Caching Strategy (Redis)
 

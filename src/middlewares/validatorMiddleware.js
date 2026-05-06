@@ -36,7 +36,7 @@ const validateRegister = [
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('role')
     .optional()
-    .isIn(['admin', 'manager', 'user']).withMessage('Invalid role'),
+    .isIn(['admin', 'manager', 'staff']).withMessage('Invalid role'),
   handleValidationErrors
 ];
 

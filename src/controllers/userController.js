@@ -61,7 +61,7 @@ class UserController {
    */
   async createUser(req, res, next) {
     try {
-      const { name, email, password, role = 'user' } = req.body;
+      const { name, email, password, role = 'staff' } = req.body;
 
       // Cek apakah email sudah dipakai
       const existingUser = await userRepository.findByEmail(email);

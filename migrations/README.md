@@ -44,7 +44,7 @@ npx sequelize-cli db:migrate
 
 ### Users Table
 - Authentication & Authorization
-- Role-based access control (admin, manager, user)
+- Role-based access control (admin, manager, staff)
 
 ### Projects Table
 - Project management

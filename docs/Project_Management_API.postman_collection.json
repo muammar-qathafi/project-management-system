@@ -100,13 +100,13 @@
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
             "url": {
-              "raw": "{{baseUrl}}/api/users?page=1&limit=10&role=user&is_active=true",
+              "raw": "{{baseUrl}}/api/users?page=1&limit=10&role=staff&is_active=true",
               "host": ["{{baseUrl}}"],
               "path": ["api", "users"],
               "query": [
                 { "key": "page", "value": "1" },
                 { "key": "limit", "value": "10" },
-                { "key": "role", "value": "user", "disabled": true },
+                { "key": "role", "value": "staff", "disabled": true },
                 { "key": "is_active", "value": "true", "disabled": true }
               ]
             }
@@ -145,7 +145,7 @@
             "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api", "users"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Staff Budi\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"Budi1234!\",\n  \"role\": \"user\"\n}",
+              "raw": "{\n  \"name\": \"Staff Budi\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"Budi1234!\",\n  \"role\": \"staff\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           }

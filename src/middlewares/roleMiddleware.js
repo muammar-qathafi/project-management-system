@@ -138,7 +138,7 @@ const canCreateTask = checkRole(['admin', 'manager']);
  *  - Manager: boleh (hanya task yang di-assign kepadanya)
  *  - User   : boleh (hanya task yang di-assign kepadanya)
  */
-const canUpdateTask = requireTaskOwnership(['manager', 'user']);
+const canUpdateTask = requireTaskOwnership(['manager', 'staff']);
 
 /**
  * Menghapus task:
