@@ -1,0 +1,316 @@
+# Architecture Documentation
+
+## Layered Architecture Overview
+
+Proyek ini menggunakan **Layered Architecture Pattern** dengan pemisahan tanggung jawab yang jelas:
+
+```
+┌─────────────────────────────────────────┐
+│           HTTP Layer (Routes)           │
+│         - Endpoint Definitions          │
+└───────────────┬─────────────────────────┘
+                │
+┌───────────────▼─────────────────────────┐
+│       Controller Layer                  │
+│   - HTTP Request/Response Handling      │
+│   - Input Validation                    │
+└───────────────┬─────────────────────────┘
+                │
+┌───────────────▼─────────────────────────┐
+│         Service Layer                   │
+│   - Business Logic                      │
+│   - Cache Management                    │
+│   - Queue Publishing                    │
+└───────────────┬─────────────────────────┘
+                │
+┌───────────────▼─────────────────────────┐
+│       Repository Layer                  │
+│   - Data Access Abstraction             │
+│   - SQL Query Operations                │
+└───────────────┬─────────────────────────┘
+                │
+┌───────────────▼─────────────────────────┐
+│          Model Layer                    │
+│   - Database Schema Definition          │
+│   - Sequelize ORM                       │
+└─────────────────────────────────────────┘
+```
+
+## Layer Responsibilities
+
+### 1. Routes Layer
+**Location**: `src/routes/`
+
+**Responsibilities**:
+- Define API endpoints
+- Mount middleware (auth, validation, RBAC)
+- Route requests to appropriate controllers
+
+**Example**:
+```javascript
+router.post('/tasks', 
+  authenticateToken,    // Auth middleware
+  canCreateTask,        // RBAC middleware (Admin + Manager)
+  validateCreateTask,   // Validation middleware
+  taskController.createTask
+);
+```
+
+### 2. Controller Layer
+**Location**: `src/controllers/`
+
+**Responsibilities**:
+- Handle HTTP requests and responses
+- Extract request data (body, params, query)
+- Call appropriate service methods
+- Format responses using response handlers
+- Error handling (pass to error middleware)
+
+**Example**:
+```javascript
+async createTask(req, res, next) {
+  try {
+    const taskData = req.body;
+    const createdBy = req.user.id;
+    const task = await taskService.createTask({ ...taskData, created_by: createdBy });
+    return res.status(201).json(successResponse(task, 'Task created', 201));
+  } catch (error) {
+    next(error);
+  }
+}
+```
+
+### 3. Service Layer
+**Location**: `src/services/`
+
+**Responsibilities**:
+- Core business logic
+- Data validation and transformation
+- Cache management (get, set, invalidate)
+- Message queue publishing
+- Orchestrate multiple repository calls
+- Transaction management
+
+**Key Features**:
+- **Cache Strategy**: Read-through cache dengan invalidation
+- **Recursive Logic**: Tree building untuk hierarchical tasks
+- **Background Jobs**: Publish messages ke RabbitMQ
+
+**Example**:
+```javascript
+async createTask(taskData) {
+  // Validate parent task
+  if (taskData.parent_task_id) {
+    const parent = await taskRepository.findById(taskData.parent_task_id);
+    if (!parent) throw new Error('Parent task not found');
+  }
+  
+  // Create task
+  const task = await taskRepository.create(taskData);
+  
+  // Invalidate cache
+  await this.invalidateTaskCache(task.project_id);
+  
+  // Publish to queue
+  await publishToQueue('task_queue', { task_id: task.id });
+  
+  return task;
+}
+```
+
+### 4. Repository Layer
+**Location**: `src/repositories/`
+
+**Responsibilities**:
+- Data access abstraction
+- SQL query operations via Sequelize
+- CRUD operations
+- Complex queries (joins, aggregations)
+- No business logic
+
+**Example**:
+```javascript
+async findAll(filters) {
+  const { page, limit, status, priority } = filters;
+  const where = {};
+  if (status) where.status = status;
+  if (priority) where.priority = priority;
+  
+  return await Task.findAndCountAll({
+    where,
+    limit,
+    offset: (page - 1) * limit,
+    order: [['created_at', 'DESC']]
+  });
+}
+```
+
+### 5. Model Layer
+**Location**: `src/models/`
+
+**Responsibilities**:
+- Define database schema
+- Relationships between entities
+- Model-level validations
+- Hooks (beforeCreate, afterUpdate, etc.)
+
+**Example**:
+```javascript
+const Task = sequelize.define('Task', {
+  title: { type: DataTypes.STRING, allowNull: false },
+  status: { type: DataTypes.ENUM('open', 'working', 'closed', 'overdue'), defaultValue: 'open' }
+}, {
+  hooks: {
+    beforeCreate: async (task) => {
+      // Hook logic
+    }
+  }
+});
+```
+
+## Supporting Components
+
+### Middlewares
+**Location**: `src/middlewares/`
+
+1. **authMiddleware.js**: JWT token verification
+2. **roleMiddleware.js**: RBAC authorization
+3. **validatorMiddleware.js**: Input validation using express-validator
+
+### Workers
+**Location**: `src/workers/`
+
+Background job processors menggunakan RabbitMQ:
+- **overdueWorker.js**: Check dan update overdue tasks
+
+### Utilities
+**Location**: `src/utils/`
+
+1. **responseHandler.js**: Standardize API responses
+2. **treeHelper.js**: Recursive functions untuk tree structure
+
+## Data Flow Example
+
+### Create Task Request Flow:
+
+```
+1. Client sends POST /api/tasks
+   ↓
+2. Route: `authenticateToken` → `canCreateTask` → `validateCreateTask` → `taskController.createTask`
+   ↓
+3. Controller: Extract data, call taskService.createTask()
+   ↓
+4. Service: 
+   - Validate business rules
+   - Call taskRepository.create()
+   - Invalidate cache
+   - Publish to RabbitMQ
+   ↓
+5. Repository: Execute SQL INSERT via Sequelize
+   ↓
+6. Model: Apply hooks, return created task
+   ↓
+7. Response flows back through layers
+   ↓
+8. Client receives JSON response
+```
+
+## Caching Strategy
+
+### Read-Through Cache
+```javascript
+// Get from cache first
+const cached = await cacheHelper.get(cacheKey);
+if (cached) return cached;
+
+// If not cached, get from DB
+const data = await repository.findAll();
+
+// Store in cache
+await cacheHelper.set(cacheKey, data, TTL);
+```
+
+### Cache Invalidation
+```javascript
+// On CREATE/UPDATE/DELETE
+await cacheHelper.delPattern('tasks:list:*');
+await cacheHelper.delPattern(`tasks:tree:${projectId}`);
+await cacheHelper.delPattern('tasks:tree:all:*');
+await cacheHelper.del(`task:${taskId}`);
+```
+
+## Background Jobs
+
+### RabbitMQ Message Flow:
+```
+Service publishes message
+   ↓
+RabbitMQ Queue
+   ↓
+Worker consumes message
+   ↓
+Process job (update DB, send email)
+   ↓
+Acknowledge message
+```
+
+## RBAC Implementation
+
+### Role Hierarchy:
+- **Admin**: Full access
+- **Manager**: Create/Update tasks & projects
+- **User**: View tasks, update assigned tasks
+
+### Middleware Chain:
+```javascript
+router.delete('/tasks/:id', 
+  authenticateToken,  // Verify user is logged in
+  isAdmin,            // Check if user has admin role
+  taskController.deleteTask
+);
+```
+
+## Error Handling
+
+### Global Error Handler:
+```javascript
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json(errorResponse(err.message, statusCode));
+});
+```
+
+### Service-Level Errors:
+```javascript
+const error = new Error('Resource not found');
+error.statusCode = 404;
+throw error;
+```
+
+## Best Practices Implemented
+
+1. ✅ **Separation of Concerns**: Each layer has single responsibility
+2. ✅ **Dependency Injection**: Layers depend on abstractions
+3. ✅ **Error Handling**: Consistent error propagation
+4. ✅ **Caching**: Redis for performance optimization
+5. ✅ **Async Processing**: RabbitMQ for background jobs
+6. ✅ **Security**: JWT + RBAC + Input validation
+7. ✅ **Scalability**: Stateless architecture with external cache
+8. ✅ **Maintainability**: Clear structure and documentation
+
+## Testing Strategy (To Implement)
+
+```
+Unit Tests:
+- Service layer logic
+- Utility functions
+- Middleware validation
+
+Integration Tests:
+- Repository database operations
+- Controller HTTP endpoints
+
+E2E Tests:
+- Full API workflows
+- Authentication flows
+```
