@@ -565,7 +565,7 @@
           }
         },
         {
-          "name": "Login as Staff (User)",
+          "name": "Login as Staff",
           "event": [
             {
               "listen": "test",
@@ -587,7 +587,7 @@
             "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"budi@example.com\",\n  \"password\": \"Budi1234!\"\n}",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"password123\"\n}",
               "options": { "raw": { "language": "json" } }
             }
           }
