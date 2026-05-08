@@ -1,8 +1,9 @@
 require('dotenv').config();
-const { consumeFromQueue, PROCESSING_QUEUE } = require('../config/rabbitmq');
+const { consumeFromQueue, PROCESSING_QUEUE, PermanentError } = require('../config/rabbitmq');
 const { sequelize } = require('../config/database');
 const { cacheHelper } = require('../config/redis');
 const { sendEmail, emailTemplates } = require('../config/mailer');
+const { Op } = require('sequelize');
 const Task = require('../models/task');
 const User = require('../models/user');
 
@@ -54,45 +55,61 @@ class OverdueWorker {
         break;
 
       default:
+        // [IDEMPOTENCY] Tipe pesan tidak dikenal tidak akan berhasil dengan retry.
+        // PermanentError memastikan pesan langsung dipindahkan ke DLQ.
         console.warn('[Worker] Unknown message type:', type);
+        throw new PermanentError(`Unknown message type: "${type}"`);
     }
   }
 
   /**
-   * Inti logika: cek task → jika belum 'completed', set 'overdue' + kirim email.
-   *
-   * Pesan dikirim tepat saat due_date tiba (via delay queue), sehingga kita
-   * cukup cek apakah status != 'closed'. Tidak perlu bandingkan tanggal lagi.
+   * Inti logika: cek task → jika belum 'closed', set 'overdue' + kirim email.
    *
    * @param {number} taskId
    */
   async processOverdueCheck(taskId) {
-    const task = await Task.findByPk(taskId);
+    // [IDEMPOTENCY] Gunakan atomic conditional UPDATE dengan WHERE clause.
+    // Jika pesan dikirim dua kali (double-delivery setelah reconnect):
+    //   - Pertama kali: UPDATE berhasil, affectedRows = 1
+    //   - Kedua kali:   Task sudah 'overdue', affectedRows = 0 → skip aman
+    //
+    // Tidak ada TOCTOU race condition karena check dan update adalah SATU
+    // SQL statement atomik (tidak ada findByPk + update terpisah).
+    //
+    // [ERROR HANDLING] Jika DB mati di sini, Task.update() melempar error.
+    // consumeFromQueue menangkapnya sebagai error transien → RETRY_QUEUE.
+    const [affectedRows] = await Task.update(
+      { status: 'overdue' },
+      {
+        where: {
+          id:     taskId,
+          status: { [Op.notIn]: ['closed', 'overdue'] }
+        }
+      }
+    );
 
-    if (!task) {
-      console.warn(`[Worker] Task #${taskId} not found, skipping.`);
+    if (affectedRows === 0) {
+      // Task tidak ditemukan, sudah closed, atau sudah overdue — aman dilewati
+      console.log(`[Worker] Task #${taskId} skipped — not found, closed, or already overdue (idempotent).`);
       return;
     }
 
-    // 'closed' = task sudah selesai sebelum due_date, tidak perlu diubah
-    if (task.status === 'closed') {
-      console.log(`[Worker] Task #${taskId} already closed, no action needed.`);
-      return;
-    }
-
-    if (task.status === 'overdue') {
-      console.log(`[Worker] Task #${taskId} already marked overdue.`);
-      return;
-    }
-
-    // Ubah status menjadi overdue
-    await task.update({ status: 'overdue' });
     console.log(`[Worker] Task #${taskId} → status set to 'overdue'`);
 
-    // Invalidasi cache tree untuk project yang bersangkutan
-    await this._invalidateCache(task.project_id, task.id);
+    // Fetch data terbaru untuk keperluan email dan cache invalidation.
+    // Jika DB sempat mati antara UPDATE dan findByPk, Task.findByPk() akan
+    // melempar error → consumeFromQueue men-retry. Pada retry berikutnya,
+    // affectedRows=0 (sudah overdue) sehingga skip dengan aman.
+    const task = await Task.findByPk(taskId);
+    if (!task) {
+      // Edge case: task dihapus antara UPDATE dan findByPk
+      console.warn(`[Worker] Task #${taskId} updated but deleted before fetch. Skipping notifications.`);
+      return;
+    }
 
-    // Kirim email notifikasi ke assignee
+    // Cache invalidation dan email tidak boleh menyebabkan retry —
+    // keduanya sudah di-wrap try/catch di dalam helper masing-masing.
+    await this._invalidateCache(task.project_id, task.id);
     await this.sendOverdueNotification(task);
   }
 
@@ -121,13 +138,14 @@ class OverdueWorker {
 
   /**
    * Hapus cache list & tree yang terpengaruh.
-   * (Duplikasi kecil dari taskService.invalidateTaskCache — worker tidak boleh
-   *  import seluruh service untuk menghindari circular dependency.)
+   * Menggunakan project-scoped key pattern agar tidak menginvalidasi
+   * cache project lain yang tidak berhubungan.
    */
   async _invalidateCache(projectId, taskId) {
     try {
       await Promise.all([
-        cacheHelper.delPattern('tasks:list:*'),
+        cacheHelper.delPattern(`tasks:list:${projectId}:*`),
+        cacheHelper.delPattern('tasks:list:all:*'),
         cacheHelper.del(`tasks:tree:${projectId}`),
         cacheHelper.del(`tasks:tree:metadata:${projectId}`),
         cacheHelper.delPattern('tasks:tree:all:*'),
