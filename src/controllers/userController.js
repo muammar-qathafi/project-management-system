@@ -1,5 +1,6 @@
 const userRepository = require('../repositories/userRepository');
 const { successResponse, errorResponse, paginationResponse } = require('../utils/responseHandler');
+const { cacheHelper } = require('../config/redis');
 
 /**
  * User Controller
@@ -120,6 +121,12 @@ class UserController {
 
       const updated = await userRepository.update(userId, updates);
 
+      // [SEC-FIX-3] Invalidate the role/status cache so authMiddleware picks up the
+      // change immediately rather than serving a stale privilege for up to 5 minutes.
+      if (updates.role !== undefined || updates.is_active !== undefined) {
+        await cacheHelper.del(`user:auth:${userId}`);
+      }
+
       const { password: _, ...userWithoutPassword } = updated.toJSON();
 
       return res.status(200).json(
@@ -173,6 +180,9 @@ class UserController {
       if (!user) {
         return res.status(404).json(errorResponse('User not found', 404));
       }
+
+      // [SEC-FIX-3] Invalidate role/status cache — deactivation must take effect immediately
+      await cacheHelper.del(`user:auth:${userId}`);
 
       const { password, ...userWithoutPassword } = user.toJSON();
 

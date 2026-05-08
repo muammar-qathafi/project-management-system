@@ -152,74 +152,80 @@ const flattenTaskTree = (tree, result = []) => {
 
 /**
  * Get all descendant IDs dari sebuah task (untuk cascade operations)
+ *
+ * PERF FIX: Sebelumnya O(n²) — tasks.filter() di dalam rekursi = O(n) per level.
+ * Sekarang O(n): bangun children Map sekali, lalu iterasi BFS tanpa rekursi
+ * sehingga aman terhadap stack overflow pada tree yang sangat dalam.
+ *
  * @param {Array} tasks - All tasks
  * @param {Number} taskId - Parent task ID
  * @returns {Array} Array of descendant task IDs
  */
 const getDescendantIds = (tasks, taskId) => {
-  const descendants = [];
-  
-  const findChildren = (parentId) => {
-    const children = tasks.filter(task => task.parent_task_id === parentId);
-    
-    for (const child of children) {
-      descendants.push(child.id);
-      findChildren(child.id); // Recursive
+  // Build children index once — O(n)
+  const childrenMap = new Map();
+  tasks.forEach(task => {
+    const pid = task.parent_task_id;
+    if (pid != null) {
+      if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+      childrenMap.get(pid).push(task.id);
     }
-  };
-  
-  findChildren(taskId);
+  });
+
+  // Iterative BFS — avoids call-stack overflow on deep trees
+  const descendants = [];
+  const queue = [taskId];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const children = childrenMap.get(current) || [];
+    for (const childId of children) {
+      descendants.push(childId);
+      queue.push(childId);
+    }
+  }
   return descendants;
 };
 
 /**
  * Get path dari root ke specific task (breadcrumb)
+ *
+ * PERF FIX: Sebelumnya O(n*depth) — tasks.find() O(n) di setiap level rekursi.
+ * Sekarang O(n): bangun Map sekali, lalu walk ke atas secara iteratif.
+ *
  * @param {Array} tasks - All tasks
  * @param {Number} taskId - Target task ID
  * @returns {Array} Path array dari root ke task
  */
 const getTaskPath = (tasks, taskId) => {
+  const taskMap = new Map(tasks.map(t => [t.id, t]));
   const path = [];
-  
-  const findPath = (currentId) => {
-    const task = tasks.find(t => t.id === currentId);
-    
-    if (!task) return false;
-    
-    path.unshift(task);
-    
-    if (task.parent_task_id) {
-      findPath(task.parent_task_id);
-    }
-    
-    return true;
-  };
-  
-  findPath(taskId);
+  let current = taskMap.get(taskId);
+  while (current) {
+    path.unshift(current);
+    current = current.parent_task_id ? taskMap.get(current.parent_task_id) : null;
+  }
   return path;
 };
 
 /**
  * Calculate depth/level of a task in tree
+ *
+ * PERF FIX: Sebelumnya O(n*depth) — tasks.find() O(n) di setiap level rekursi.
+ * Sekarang O(n): bangun Map sekali, lalu walk ke atas secara iteratif.
+ *
  * @param {Array} tasks - All tasks
  * @param {Number} taskId - Task ID
  * @returns {Number} Depth level (0 for root)
  */
 const getTaskDepth = (tasks, taskId) => {
+  const taskMap = new Map(tasks.map(t => [t.id, t]));
   let depth = 0;
-  
-  const findDepth = (currentId) => {
-    const task = tasks.find(t => t.id === currentId);
-    
-    if (!task || !task.parent_task_id) {
-      return depth;
-    }
-    
+  let current = taskMap.get(taskId);
+  while (current && current.parent_task_id) {
     depth++;
-    return findDepth(task.parent_task_id);
-  };
-  
-  return findDepth(taskId);
+    current = taskMap.get(current.parent_task_id);
+  }
+  return depth;
 };
 
 /**

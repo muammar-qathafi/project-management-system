@@ -34,9 +34,9 @@ const validateRegister = [
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role')
-    .optional()
-    .isIn(['admin', 'manager', 'staff']).withMessage('Invalid role'),
+  // [SEC-FIX-1] Role is NOT accepted during public registration.
+  // All self-registered accounts are created as 'staff' by authService.
+  // Elevated roles can only be assigned by an Admin via PUT /api/users/:id.
   handleValidationErrors
 ];
 

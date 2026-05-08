@@ -27,8 +27,9 @@ class TaskService {
   async getAllTasks(filters) {
     const { page, limit, status, priority, project_id, userId } = filters;
 
-    // Prefix 'tasks:list:' agar tidak bertabrakan dengan key tree ('tasks:tree:*')
-    const cacheKey = `tasks:list:${JSON.stringify(filters)}`;
+    // Sertakan project_id sebagai prefix key agar invalidation hanya menyentuh
+    // cache untuk project yang bersangkutan, bukan seluruh tasks:list:*
+    const cacheKey = `tasks:list:${filters.project_id || 'all'}:${JSON.stringify(filters)}`;
 
     // Try to get from cache
     const cached = await cacheHelper.get(cacheKey);
@@ -155,15 +156,22 @@ class TaskService {
     }
 
     // Get all tasks with filters
-    const tasks = await taskRepository.findAll({ 
-      page: 1, 
-      limit: 10000, // Large limit untuk get all
-      status, 
-      priority 
+    // PERF NOTE: limit di-cap di 5000 untuk mencegah alokasi memori yang tidak
+    // terkendali. Untuk dataset lebih besar, gunakan pagination per-project.
+    const MAX_TREE_LIMIT = 5000;
+    const tasks = await taskRepository.findAll({
+      page: 1,
+      limit: MAX_TREE_LIMIT,
+      status,
+      priority
     });
 
     if (!tasks || !tasks.tasks || tasks.tasks.length === 0) {
       return { tree: [], statistics: { total_tasks: 0 } };
+    }
+
+    if (tasks.total > MAX_TREE_LIMIT) {
+      console.warn(`[getAllTasksTree] Total tasks (${tasks.total}) melebihi limit ${MAX_TREE_LIMIT}. Tree mungkin tidak lengkap.`);
     }
 
     // Build tree
@@ -382,10 +390,8 @@ class TaskService {
     const allTasks = await taskRepository.findByProject(task.project_id);
     const descendantIds = getDescendantIds(allTasks, taskId);
 
-    // Delete all subtasks first (cascade)
-    for (const id of descendantIds) {
-      await taskRepository.delete(id);
-    }
+    // Delete all subtasks first (cascade) — parallelkan agar tidak serial O(n) round-trips
+    await Promise.all(descendantIds.map(id => taskRepository.delete(id)));
 
     // Delete main task
     await taskRepository.delete(taskId);
@@ -427,10 +433,11 @@ class TaskService {
    * Dipanggil setiap Create / Update / Delete task.
    * Menghapus semua key cache yang datanya mungkin sudah stale:
    *
-   *  tasks:list:*           — hasil GET /tasks (paginated list, semua filter)
-   *  tasks:tree:{id}        — basic tree untuk project ini
+   *  tasks:list:{projectId}:* — list cache hanya untuk project ini (bukan semua project)
+   *  tasks:list:all:*         — cross-project list cache (admin view)
+   *  tasks:tree:{id}          — basic tree untuk project ini
    *  tasks:tree:metadata:{id} — tree + metadata untuk project ini
-   *  tasks:tree:all:*       — tree lintas-project (admin view, semua filter)
+   *  tasks:tree:all:*         — tree lintas-project (admin view, semua filter)
    *
    * Catatan: single-task cache (task:{id}) TIDAK dihapus di sini;
    * updateTask menanganinya dengan write-through,
@@ -438,8 +445,10 @@ class TaskService {
    */
   async invalidateTaskCache(projectId) {
     await Promise.all([
-      // Semua variant paginated-list (mengandung project_id di JSON filter)
-      cacheHelper.delPattern(`tasks:list:*`),
+      // Hanya list cache untuk project ini — tidak menyentuh project lain
+      cacheHelper.delPattern(`tasks:list:${projectId}:*`),
+      // Cross-project admin list cache
+      cacheHelper.delPattern(`tasks:list:all:*`),
       // Basic tree untuk project ini
       cacheHelper.del(`tasks:tree:${projectId}`),
       // Tree + metadata untuk project ini

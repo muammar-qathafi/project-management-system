@@ -13,8 +13,12 @@ class AuthService {
    * Register user baru
    */
   async register(userData) {
+    // [SEC-FIX-1] Force role to 'staff' — public registration must never grant elevated
+    // privileges regardless of what the caller sends in the request body.
+    const safeUserData = { ...userData, role: 'staff' };
+
     // Check if email already exists
-    const existingUser = await userRepository.findByEmail(userData.email);
+    const existingUser = await userRepository.findByEmail(safeUserData.email);
     if (existingUser) {
       const error = new Error('Email already registered');
       error.statusCode = 400;
@@ -22,7 +26,7 @@ class AuthService {
     }
 
     // Create user (password akan di-hash di model hook)
-    const user = await userRepository.create(userData);
+    const user = await userRepository.create(safeUserData);
 
     // Generate JWT token
     const token = this.generateToken(user);
@@ -128,7 +132,9 @@ class AuthService {
       role: user.role
     };
 
+    // [SEC-FIX-2] Pin algorithm to HS256 to prevent algorithm confusion attacks
     return jwt.sign(payload, process.env.JWT_SECRET, {
+      algorithm: 'HS256',
       expiresIn: process.env.JWT_EXPIRES_IN || '24h'
     });
   }
@@ -137,7 +143,8 @@ class AuthService {
    * Verify token (untuk middleware)
    */
   verifyToken(token) {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    // [SEC-FIX-2] Algorithm pinned
+    return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
   }
 }
 

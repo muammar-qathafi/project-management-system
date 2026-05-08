@@ -1,6 +1,6 @@
 # Project Management System
 
-REST API backend untuk sistem manajemen proyek dan task. Dibangun dengan arsitektur berlapis (layered architecture) yang bersih, dilengkapi autentikasi JWT, RBAC tiga peran, Redis caching, dan background job via RabbitMQ.
+REST API backend untuk sistem manajemen proyek dan task. Dibangun dengan arsitektur berlapis (layered architecture) yang bersih, dilengkapi autentikasi JWT (HS256), RBAC tiga peran, Redis caching, dan background job via RabbitMQ.
 
 ## Tech Stack
 
@@ -129,7 +129,7 @@ npm run worker
 
 | Method | Endpoint | Deskripsi | Auth |
 |---|---|---|---|
-| POST | `/api/auth/register` | Daftar akun baru | - |
+| POST | `/api/auth/register` | Daftar akun baru (role selalu `staff`) | - |
 | POST | `/api/auth/login` | Login, mendapat JWT token | - |
 | GET | `/api/auth/profile` | Lihat profil sendiri | ✓ |
 | POST | `/api/auth/logout` | Logout, invalidate token | ✓ |
@@ -197,12 +197,76 @@ Tiga role dengan hak akses berbeda:
 | `manager` | Buat/kelola project & task, tidak bisa hapus user |
 | `staff` | Baca data, update task yang di-assign ke dirinya |
 
+Catatan penting:
+- Registrasi publik (`POST /api/auth/register`) **selalu** membuat akun dengan role `staff`. Field `role` diabaikan.
+- Role hanya dapat diubah oleh Admin melalui `PUT /api/users/:id`.
+- Setiap request memvalidasi ulang role dan status aktif dari database (bukan hanya dari JWT payload), sehingga perubahan role/deaktivasi akun langsung berlaku dalam ≤5 menit.
+
+### Menambahkan Admin & Manager
+
+Karena registrasi publik terkunci ke `staff`, ada dua jalur resmi untuk membuat akun dengan role lebih tinggi:
+
+**Jalur 1 — Bootstrap Admin pertama via database seed**
+
+Admin pertama tidak dapat dibuat lewat API karena belum ada admin yang mengotorisasi. Gunakan migrasi `005_sample_data.sql` (sudah disertakan untuk development) atau insert manual:
+
+```sql
+-- Jalankan sekali saat setup awal (gunakan hash bcrypt yang sesuai)
+INSERT INTO users (name, email, password, role, is_active)
+VALUES ('Super Admin', 'admin@company.com', '$2b$10$...bcrypt_hash...', 'admin', true);
+```
+
+**Jalur 2 — Admin membuat user baru langsung dengan role tertentu**
+
+Setelah admin pertama ada, gunakan endpoint `POST /api/users` (Admin only):
+
+```http
+POST /api/users
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@company.com",
+  "password": "SecurePass123",
+  "role": "manager"
+}
+```
+
+**Jalur 3 — Admin mempromosikan user yang sudah terdaftar**
+
+User yang sudah mendaftar via `POST /api/auth/register` (role `staff`) dapat dipromosikan oleh Admin:
+
+```http
+PUT /api/users/:id
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+```
+
+```
+Alur lengkap:
+
+DB Seed (migrasi)
+      │
+      ▼
+  Admin pertama
+      │
+      ├── POST /api/users  → Buat Manager/Admin baru langsung
+      │
+      └── PUT /api/users/:id → Promosi Staff yang sudah ada
+```
+
 ### Caching Strategy (Redis)
 
 - **Read-through**: GET task/project membaca cache terlebih dahulu
 - **Cache invalidation**: CREATE/UPDATE/DELETE menghapus cache terkait
-- **Logout blacklist**: Token JWT yang di-logout disimpan di Redis sampai expire
-- **Key pattern**: `tasks:list:*`, `tasks:tree:{projectId}`, `task:{id}`
+- **Logout blacklist**: Token JWT yang di-logout disimpan di Redis sampai expire. Blacklist check bersifat *fail-closed* — jika Redis tidak tersedia, request ditolak (HTTP 503) daripada melewati pemeriksaan
+- **Role/status cache**: `user:auth:{id}` di-cache selama 5 menit. Otomatis di-invalidasi saat Admin mengubah role atau status akun melalui `PUT /api/users/:id` atau `PATCH /api/users/:id/status`
+- **Key pattern**: `tasks:list:*`, `tasks:tree:{projectId}`, `task:{id}`, `user:auth:{id}`
 
 ### Background Jobs (RabbitMQ)
 
@@ -224,6 +288,17 @@ npm start        # Jalankan server production
 npm run dev      # Jalankan server development (nodemon)
 npm run worker   # Jalankan background worker
 ```
+
+## Security
+
+| Mekanisme | Detail |
+|---|---|
+| JWT Algorithm | HS256 — di-pin secara eksplisit; `alg:none` dan downgrade ke RS256 ditolak |
+| Blacklist token | Redis fail-closed — Redis error → HTTP 503, bukan bypass |
+| Role enforcement | Divalidasi dari DB per-request (cached 5 menit), bukan dari JWT payload |
+| Privilege escalation | Registrasi publik terkunci ke role `staff`; role hanya dapat diubah Admin |
+| SQL Injection | Seluruh query menggunakan Sequelize ORM dengan parameterized query |
+| Password hashing | bcrypt (salt rounds: 10) via Sequelize model hook |
 
 ## Authors
 Muammar Qathafi

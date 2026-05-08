@@ -64,11 +64,25 @@ const cacheHelper = {
   },
 
   // Delete multiple keys by pattern
+  //
+  // PERF FIX: Sebelumnya menggunakan KEYS yang bersifat O(n) blocking — satu perintah
+  // KEYS menyebabkan Redis tidak bisa melayani request lain sampai scan selesai.
+  // Di production dengan jutaan key, ini bisa membekukan Redis selama ratusan ms.
+  //
+  // Sekarang menggunakan SCAN iterator yang:
+  //  1. Non-blocking — setiap iterasi hanya memproses ~COUNT key
+  //  2. Aman di production keyspace yang besar
+  //  3. Menghapus dalam batch 100 untuk menghindari payload DEL yang besar
   async delPattern(pattern) {
     try {
-      const keys = await redisClient.keys(pattern);
+      const keys = [];
+      for await (const key of redisClient.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+        keys.push(key);
+      }
       if (keys.length > 0) {
-        await redisClient.del(keys);
+        for (let i = 0; i < keys.length; i += 100) {
+          await redisClient.del(keys.slice(i, i + 100));
+        }
       }
       return true;
     } catch (error) {
