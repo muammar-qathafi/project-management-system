@@ -1,4 +1,5 @@
 const redis = require('redis');
+const logger = require('./logger');
 require('dotenv').config();
 
 // Konfigurasi Redis client untuk caching
@@ -12,11 +13,11 @@ const redisClient = redis.createClient({
 });
 
 redisClient.on('connect', () => {
-  console.log('✓ Redis client connected');
+  logger.info('Redis client connected');
 });
 
 redisClient.on('error', (err) => {
-  console.error('✗ Redis client error:', err.message);
+  logger.error({ err }, 'Redis client error');
 });
 
 // Connect to Redis
@@ -24,7 +25,7 @@ const connectRedis = async () => {
   try {
     await redisClient.connect();
   } catch (error) {
-    console.error('✗ Failed to connect to Redis:', error.message);
+    logger.error({ err: error }, 'Failed to connect to Redis');
   }
 };
 
@@ -36,7 +37,7 @@ const cacheHelper = {
       await redisClient.setEx(key, parseInt(ttl), JSON.stringify(value));
       return true;
     } catch (error) {
-      console.error('Redis set error:', error.message);
+      logger.error({ err: error, key }, 'Redis set error');
       return false;
     }
   },
@@ -47,7 +48,7 @@ const cacheHelper = {
       const data = await redisClient.get(key);
       return data ? JSON.parse(data) : null;
     } catch (error) {
-      console.error('Redis get error:', error.message);
+      logger.error({ err: error, key }, 'Redis get error');
       return null;
     }
   },
@@ -58,7 +59,7 @@ const cacheHelper = {
       await redisClient.del(key);
       return true;
     } catch (error) {
-      console.error('Redis del error:', error.message);
+      logger.error({ err: error, key }, 'Redis del error');
       return false;
     }
   },
@@ -86,7 +87,7 @@ const cacheHelper = {
       }
       return true;
     } catch (error) {
-      console.error('Redis delPattern error:', error.message);
+      logger.error({ err: error, pattern }, 'Redis delPattern error');
       return false;
     }
   }

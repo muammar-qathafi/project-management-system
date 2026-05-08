@@ -1,4 +1,5 @@
 const { Sequelize } = require('sequelize');
+const logger = require('./logger');
 require('dotenv').config();
 
 // Konfigurasi koneksi database MySQL menggunakan Sequelize
@@ -10,7 +11,7 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 3306,
     dialect: process.env.DB_DIALECT || 'mysql',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: process.env.NODE_ENV === 'development' ? (sql) => logger.debug({ sql }, 'Sequelize') : false,
     pool: {
       max: 10,
       min: 0,
@@ -29,9 +30,9 @@ const sequelize = new Sequelize(
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✓ Database connection established successfully');
+    logger.info('Database connection established successfully');
   } catch (error) {
-    console.error('✗ Unable to connect to database:', error.message);
+    logger.error({ err: error }, 'Unable to connect to database');
     process.exit(1);
   }
 };

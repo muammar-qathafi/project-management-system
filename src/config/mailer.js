@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const logger = require('./logger');
 require('dotenv').config();
 
 // Konfigurasi NodeMailer untuk mengirim email
@@ -16,9 +17,9 @@ const transporter = nodemailer.createTransport({
 const verifyMailer = async () => {
   try {
     await transporter.verify();
-    console.log('✓ Mailer is ready to send emails');
+    logger.info('Mailer is ready to send emails');
   } catch (error) {
-    console.error('✗ Mailer verification failed:', error.message);
+    logger.error({ err: error }, 'Mailer verification failed');
   }
 };
 
@@ -34,10 +35,10 @@ const sendEmail = async ({ to, subject, text, html }) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', info.messageId);
+    logger.info({ messageId: info.messageId, to }, 'Email sent');
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error sending email:', error.message);
+    logger.error({ err: error, to }, 'Error sending email');
     return { success: false, error: error.message };
   }
 };

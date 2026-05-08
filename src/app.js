@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
+const pinoHttp = require('pino-http');
+const logger = require('./config/logger');
 require('dotenv').config();
 
 // Import routes
@@ -22,10 +23,13 @@ app.use(cors({
   credentials: true
 }));
 
-// Logger middleware (only in development)
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-}
+// HTTP request/response logger (replaces morgan)
+// Setiap request otomatis di-log dengan method, url, status, dan responseTime
+app.use(pinoHttp({
+  logger,
+  // Jangan log health check — terlalu noisy
+  autoLogging: { ignore: (req) => req.url === '/health' }
+}));
 
 // Body parser middleware
 app.use(express.json());
@@ -50,7 +54,7 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error({ err, url: req.url, method: req.method }, 'Unhandled error');
 
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';

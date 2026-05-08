@@ -2,6 +2,7 @@ const taskRepository = require('../repositories/taskRepository');
 const { cacheHelper } = require('../config/redis');
 const { publishDelayed, publishToQueue, PROCESSING_QUEUE } = require('../config/rabbitmq');
 const { sendEmail, emailTemplates } = require('../config/mailer');
+const logger = require('../config/logger').child({ component: 'taskService' });
 const User = require('../models/user');
 const { 
   buildTaskTree, 
@@ -34,7 +35,7 @@ class TaskService {
     // Try to get from cache
     const cached = await cacheHelper.get(cacheKey);
     if (cached) {
-      console.log('Cache hit for tasks');
+      logger.debug({ cacheKey }, 'Cache hit: task list');
       return cached;
     }
 
@@ -58,11 +59,11 @@ class TaskService {
     // Try cache first
     const cached = await cacheHelper.get(cacheKey);
     if (cached) {
-      console.log('✓ Cache hit for task tree');
+      logger.debug({ projectId }, 'Cache hit: task tree');
       return cached;
     }
 
-    console.log('✗ Cache miss - Building task tree from database');
+    logger.debug({ projectId }, 'Cache miss — building task tree from database');
 
     // Get all tasks for project (flat array)
     const tasks = await taskRepository.findByProject(projectId);
@@ -96,7 +97,7 @@ class TaskService {
     // Cache tree structure
     await cacheHelper.set(cacheKey, result, 600); // 10 minutes
 
-    console.log(`✓ Task tree built: ${tasks.length} tasks, ${statistics.max_depth} levels`);
+    logger.info({ projectId, taskCount: tasks.length, maxDepth: statistics.max_depth }, 'Task tree built');
 
     return result;
   }
@@ -110,7 +111,7 @@ class TaskService {
     // Try cache
     const cached = await cacheHelper.get(cacheKey);
     if (cached) {
-      console.log('✓ Cache hit for task tree with metadata');
+      logger.debug({ projectId }, 'Cache hit: task tree with metadata');
       return cached;
     }
 
@@ -151,7 +152,7 @@ class TaskService {
     // Try cache
     const cached = await cacheHelper.get(cacheKey);
     if (cached) {
-      console.log('✓ Cache hit for all tasks tree');
+      logger.debug({}, 'Cache hit: all tasks tree');
       return cached;
     }
 
@@ -171,7 +172,7 @@ class TaskService {
     }
 
     if (tasks.total > MAX_TREE_LIMIT) {
-      console.warn(`[getAllTasksTree] Total tasks (${tasks.total}) melebihi limit ${MAX_TREE_LIMIT}. Tree mungkin tidak lengkap.`);
+      logger.warn({ total: tasks.total, limit: MAX_TREE_LIMIT }, 'getAllTasksTree: total exceeds limit, tree may be incomplete');
     }
 
     // Build tree
@@ -243,7 +244,7 @@ class TaskService {
     // Try cache
     const cached = await cacheHelper.get(cacheKey);
     if (cached) {
-      console.log('Cache hit for task:', taskId);
+      logger.debug({ taskId }, 'Cache hit: single task');
       return cached;
     }
 
@@ -420,10 +421,10 @@ class TaskService {
       const { subject, text, html } = emailTemplates.taskAssigned(task, assignee, assigner);
       await sendEmail({ to: assignee.email, subject, text, html });
 
-      console.log(`[Mail] Assignment email sent → ${assignee.email} (task #${task.id})`);
+      logger.info({ to: assignee.email, taskId: task.id }, 'Assignment email sent');
     } catch (err) {
       // Email gagal tidak boleh menghentikan flow utama
-      console.error('[Mail] Failed to send assignment email:', err.message);
+      logger.error({ err, taskId: task.id }, 'Failed to send assignment email');
     }
   }
 
@@ -457,7 +458,7 @@ class TaskService {
       cacheHelper.delPattern(`tasks:tree:all:*`),
     ]);
 
-    console.log(`✓ Cache invalidated for project: ${projectId}`);
+    logger.debug({ projectId }, 'Cache invalidated');
   }
 
   /**

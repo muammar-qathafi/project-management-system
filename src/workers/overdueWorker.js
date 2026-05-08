@@ -3,6 +3,7 @@ const { consumeFromQueue, PROCESSING_QUEUE, PermanentError } = require('../confi
 const { sequelize } = require('../config/database');
 const { cacheHelper } = require('../config/redis');
 const { sendEmail, emailTemplates } = require('../config/mailer');
+const logger = require('../config/logger').child({ component: 'worker' });
 const { Op } = require('sequelize');
 const Task = require('../models/task');
 const User = require('../models/user');
@@ -28,16 +29,16 @@ class OverdueWorker {
    */
   async start() {
     try {
-      console.log('[Worker] Starting Overdue Worker...');
+      logger.info('Starting Overdue Worker...');
 
       await sequelize.authenticate();
-      console.log('[Worker] ✓ Database connected');
+      logger.info('Database connected');
 
       await consumeFromQueue(PROCESSING_QUEUE, (msg) => this.handleMessage(msg));
 
-      console.log(`[Worker] ✓ Listening on "${PROCESSING_QUEUE}"`);
+      logger.info({ queue: PROCESSING_QUEUE }, 'Worker listening on queue');
     } catch (error) {
-      console.error('[Worker] Failed to start:', error.message);
+      logger.error({ err: error }, 'Failed to start worker');
       process.exit(1);
     }
   }
@@ -47,7 +48,7 @@ class OverdueWorker {
    */
   async handleMessage(message) {
     const { type } = message;
-    console.log('[Worker] Received message:', message);
+    logger.info({ type, message }, 'Message received');
 
     switch (type) {
       case 'task_overdue_check':
@@ -55,9 +56,7 @@ class OverdueWorker {
         break;
 
       default:
-        // [IDEMPOTENCY] Tipe pesan tidak dikenal tidak akan berhasil dengan retry.
-        // PermanentError memastikan pesan langsung dipindahkan ke DLQ.
-        console.warn('[Worker] Unknown message type:', type);
+        logger.warn({ type }, 'Unknown message type');
         throw new PermanentError(`Unknown message type: "${type}"`);
     }
   }
@@ -89,12 +88,11 @@ class OverdueWorker {
     );
 
     if (affectedRows === 0) {
-      // Task tidak ditemukan, sudah closed, atau sudah overdue — aman dilewati
-      console.log(`[Worker] Task #${taskId} skipped — not found, closed, or already overdue (idempotent).`);
+      logger.debug({ taskId }, 'Task skipped — not found, closed, or already overdue (idempotent)');
       return;
     }
 
-    console.log(`[Worker] Task #${taskId} → status set to 'overdue'`);
+    logger.info({ taskId }, "Task status set to 'overdue'");
 
     // Fetch data terbaru untuk keperluan email dan cache invalidation.
     // Jika DB sempat mati antara UPDATE dan findByPk, Task.findByPk() akan
@@ -102,8 +100,7 @@ class OverdueWorker {
     // affectedRows=0 (sudah overdue) sehingga skip dengan aman.
     const task = await Task.findByPk(taskId);
     if (!task) {
-      // Edge case: task dihapus antara UPDATE dan findByPk
-      console.warn(`[Worker] Task #${taskId} updated but deleted before fetch. Skipping notifications.`);
+      logger.warn({ taskId }, 'Task updated but deleted before fetch. Skipping notifications.');
       return;
     }
 
@@ -127,12 +124,12 @@ class OverdueWorker {
       const result = await sendEmail({ to: user.email, subject, text, html });
 
       if (result.success) {
-        console.log(`[Worker] Overdue email sent → ${user.email} (task #${task.id})`);
+        logger.info({ to: user.email, taskId: task.id }, 'Overdue email sent');
       } else {
-        console.warn(`[Worker] Email failed for task #${task.id}:`, result.error);
+        logger.warn({ taskId: task.id, error: result.error }, 'Overdue email failed');
       }
     } catch (err) {
-      console.error('[Worker] sendOverdueNotification error:', err.message);
+      logger.error({ err, taskId: task.id }, 'sendOverdueNotification error');
     }
   }
 
@@ -151,9 +148,9 @@ class OverdueWorker {
         cacheHelper.delPattern('tasks:tree:all:*'),
         cacheHelper.del(`task:${taskId}`)
       ]);
-      console.log(`[Worker] Cache invalidated for project #${projectId}`);
+      logger.info({ projectId }, 'Cache invalidated');
     } catch (err) {
-      console.error('[Worker] Cache invalidation error:', err.message);
+      logger.error({ err, projectId }, 'Cache invalidation error');
     }
   }
 }
@@ -164,7 +161,7 @@ if (require.main === module) {
   worker.start();
 
   const shutdown = (signal) => {
-    console.log(`[Worker] ${signal} received, shutting down...`);
+    logger.info({ signal }, 'Shutdown signal received');
     process.exit(0);
   };
 

@@ -1,4 +1,5 @@
 const amqp = require('amqplib');
+const logger = require('./logger');
 require('dotenv').config();
 
 let connection = null;
@@ -91,15 +92,14 @@ const connectRabbitMQ = async () => {
     //    dimonitor secara manual atau via alerting.
     await channel.assertQueue(DLQ_QUEUE, { durable: true });
 
-    console.log('✓ RabbitMQ connected (queues: processing + delay + retry + dlq)');
+    logger.info('RabbitMQ connected (queues: processing + delay + retry + dlq)');
 
     connection.on('error', (err) => {
-      console.error('✗ RabbitMQ connection error:', err.message);
+      logger.error({ err }, 'RabbitMQ connection error');
     });
 
     connection.on('close', () => {
-      console.log('RabbitMQ connection closed, attempting to reconnect...');
-      // Reset channel agar getChannel() tidak pakai referensi lama yang sudah mati
+      logger.warn('RabbitMQ connection closed, attempting to reconnect...');
       connection = null;
       channel = null;
       setTimeout(connectRabbitMQ, 5000);
@@ -107,7 +107,7 @@ const connectRabbitMQ = async () => {
 
     return { connection, channel };
   } catch (error) {
-    console.error('✗ Failed to connect to RabbitMQ:', error.message);
+    logger.error({ err: error }, 'Failed to connect to RabbitMQ');
     setTimeout(connectRabbitMQ, 5000);
   }
 };
@@ -127,10 +127,10 @@ const publishToQueue = async (queueName, message) => {
     ch.sendToQueue(queueName, Buffer.from(JSON.stringify(message)), {
       persistent: true
     });
-    console.log(`[MQ] Published to ${queueName}:`, message);
+    logger.info({ queue: queueName, message }, 'Message published to queue');
     return true;
   } catch (error) {
-    console.error('[MQ] publishToQueue error:', error.message);
+    logger.error({ err: error, queue: queueName }, 'publishToQueue error');
     return false;
   }
 };
@@ -155,10 +155,10 @@ const publishDelayed = async (message, delayMs) => {
     });
 
     const fireAt = new Date(Date.now() + ttl).toISOString();
-    console.log(`[MQ] Delayed message queued (ttl=${ttl}ms, fires≈${fireAt}):`, message);
+    logger.info({ ttl, fireAt, message }, 'Delayed message queued');
     return true;
   } catch (error) {
-    console.error('[MQ] publishDelayed error:', error.message);
+    logger.error({ err: error }, 'publishDelayed error');
     return false;
   }
 };
@@ -177,7 +177,7 @@ const _publishToRetry = (ch, content, retryCount) => {
     persistent:  true,
     expiration:  String(delayMs)
   });
-  console.warn(`[MQ] Retry #${retryCount}/${MAX_RETRIES} queued (delay=${delayMs}ms, task_id=${content.task_id || '?'})`);
+  logger.warn({ retryCount, maxRetries: MAX_RETRIES, delayMs, task_id: content.task_id || null }, 'Message queued for retry');
 };
 
 /**
@@ -192,7 +192,7 @@ const _publishToDLQ = (ch, originalBuffer, reason, retryCount = 0) => {
     failed_at:        new Date().toISOString()
   };
   ch.sendToQueue(DLQ_QUEUE, Buffer.from(JSON.stringify(dlqPayload)), { persistent: true });
-  console.error(`[MQ] Message moved to DLQ (retries=${retryCount}): ${reason}`);
+  logger.error({ retryCount, reason }, 'Message moved to DLQ');
 };
 
 // ─── Consumer ────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ const consumeFromQueue = async (queueName, callback) => {
     await ch.assertQueue(queueName, { durable: true });
     ch.prefetch(1); // proses satu pesan per waktu
 
-    console.log(`[MQ] Waiting for messages in "${queueName}"...`);
+    logger.info({ queue: queueName }, 'Waiting for messages');
 
     ch.consume(queueName, async (msg) => {
       if (!msg) return;
@@ -229,7 +229,7 @@ const consumeFromQueue = async (queueName, callback) => {
       try {
         content = JSON.parse(msg.content.toString());
       } catch (parseError) {
-        console.error('[MQ] Malformed JSON, routing to DLQ:', msg.content.toString());
+        logger.error({ rawMessage: msg.content.toString() }, 'Malformed JSON, routing to DLQ');
         _publishToDLQ(ch, msg.content, `JSON parse error: ${parseError.message}`);
         ch.ack(msg);
         return;
@@ -257,7 +257,7 @@ const consumeFromQueue = async (queueName, callback) => {
       }
     });
   } catch (error) {
-    console.error('[MQ] consumeFromQueue error:', error.message);
+    logger.error({ err: error }, 'consumeFromQueue error');
   }
 };
 
@@ -265,9 +265,9 @@ const closeRabbitMQ = async () => {
   try {
     if (channel)    await channel.close();
     if (connection) await connection.close();
-    console.log('[MQ] Connection closed');
+    logger.info('RabbitMQ connection closed');
   } catch (error) {
-    console.error('[MQ] closeRabbitMQ error:', error.message);
+    logger.error({ err: error }, 'closeRabbitMQ error');
   }
 };
 
