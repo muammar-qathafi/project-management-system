@@ -42,6 +42,45 @@ project-management-system/
 - MySQL 8.0
 - Redis
 - RabbitMQ
+- Docker (opsional, direkomendasikan untuk menjalankan Redis & RabbitMQ)
+
+### Menjalankan Infrastructure via Docker Compose
+
+Cara tercepat untuk menjalankan MySQL, Redis, dan RabbitMQ sekaligus:
+
+```bash
+docker-compose up -d
+```
+
+Ini akan menjalankan tiga container sesuai konfigurasi di `.env`:
+
+| Container | Service | Port |
+|---|---|---|
+| `project_mgmt_mysql` | MySQL 8.0 | 3306 |
+| `project_mgmt_redis` | Redis | 6379 |
+| `project_mgmt_rabbitmq` | RabbitMQ + Management UI | 5672 / 15672 |
+
+```bash
+# Cek status semua container
+docker-compose ps
+
+# Hentikan semua container
+docker-compose down
+
+# Hentikan dan hapus semua data volume (reset total)
+docker-compose down -v
+```
+
+> **RabbitMQ Management UI:** http://localhost:15672
+> Login dengan `admin` / `admin123` (sesuai `.env`)
+>
+> Jika user tidak bisa login ke Management UI, jalankan sekali:
+> ```bash
+> docker exec project_mgmt_rabbitmq rabbitmqctl set_user_tags admin administrator
+> docker exec project_mgmt_rabbitmq rabbitmqctl set_permissions -p / admin ".*" ".*" ".*"
+> ```
+
+> **Catatan MySQL:** Volume `./migrations` di-mount ke `docker-entrypoint-initdb.d` — MySQL akan otomatis menjalankan semua file `.sql` saat pertama kali container dibuat (database kosong). Jika database sudah ada, mount ini diabaikan.
 
 ### Langkah Setup
 
@@ -122,6 +161,13 @@ npm start
 ```bash
 npm run worker
 ```
+
+> **Memantau antrian RabbitMQ:** Buka http://localhost:15672 setelah server berjalan.
+> Queue yang digunakan project ini:
+> - `task_overdue_queue` — antrian utama pemrosesan task overdue
+> - `task_overdue_queue.delay` — pesan tertunda (delay via DLX)
+> - `task_overdue_queue.retry` — pesan yang gagal dan menunggu retry
+> - `task_overdue_queue.dlq` — pesan yang gagal permanen (Dead Letter Queue)
 
 ## API Endpoints
 
