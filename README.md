@@ -11,8 +11,10 @@ REST API backend untuk sistem manajemen proyek dan task. Dibangun dengan arsitek
 | Database | MySQL 8.0 + Sequelize ORM v6 |
 | Cache | Redis |
 | Message Queue | RabbitMQ |
-| Auth | JWT + bcrypt |
+| Auth | JWT (HS256) + bcrypt |
 | Email | Nodemailer |
+| Logging | Pino + pino-http |
+| Rate Limiting | express-rate-limit |
 
 ## Struktur Proyek
 
@@ -173,12 +175,14 @@ npm run worker
 
 ### Authentication `POST /api/auth`
 
-| Method | Endpoint | Deskripsi | Auth |
-|---|---|---|---|
-| POST | `/api/auth/register` | Daftar akun baru (role selalu `staff`) | - |
-| POST | `/api/auth/login` | Login, mendapat JWT token | - |
-| GET | `/api/auth/profile` | Lihat profil sendiri | ✓ |
-| POST | `/api/auth/logout` | Logout, invalidate token | ✓ |
+| Method | Endpoint | Deskripsi | Auth | Rate Limit |
+|---|---|---|---|---|
+| POST | `/api/auth/register` | Daftar akun baru (role selalu `staff`) | - | 5 req/jam/IP |
+| POST | `/api/auth/login` | Login, mendapat JWT token | - | 10 req gagal/15 menit/IP |
+| GET | `/api/auth/profile` | Lihat profil sendiri | ✓ | - |
+| POST | `/api/auth/logout` | Logout, invalidate token | ✓ | - |
+
+> Jika rate limit terlampaui, server mengembalikan HTTP **429 Too Many Requests** dengan pesan waktu tunggu.
 
 ### Users `GET /api/users` — Admin only
 
@@ -214,7 +218,8 @@ npm run worker
 | PUT | `/api/tasks/:id` | Update task | Admin / Manager / Assignee |
 | DELETE | `/api/tasks/:id` | Hapus task | Admin / Manager (task assigned) |
 
-> Dokumentasi lengkap dan contoh payload tersedia di `docs/Project_Management_API.postman_collection.json`
+> Dokumentasi lengkap beserta contoh response (200/201, 400, 401, 403, 404, 409, 429) tersedia di `docs/Project_Management_API.postman_collection.json`.
+> Import ke Postman dan buka tab **Examples** pada setiap request.
 
 ## Arsitektur
 
@@ -330,9 +335,11 @@ Task mendukung hubungan parent-child tak terbatas:
 ## Scripts
 
 ```bash
-npm start        # Jalankan server production
-npm run dev      # Jalankan server development (nodemon)
-npm run worker   # Jalankan background worker
+npm start             # Jalankan server production
+npm run dev           # Jalankan server development (nodemon)
+npm run worker        # Jalankan background worker
+npm test              # Jalankan semua unit test
+npm run test:coverage # Jalankan test + laporan coverage
 ```
 
 ## Security
@@ -345,6 +352,8 @@ npm run worker   # Jalankan background worker
 | Privilege escalation | Registrasi publik terkunci ke role `staff`; role hanya dapat diubah Admin |
 | SQL Injection | Seluruh query menggunakan Sequelize ORM dengan parameterized query |
 | Password hashing | bcrypt (salt rounds: 10) via Sequelize model hook |
+| Rate limiting | Login: 10 percobaan gagal/15 menit/IP — Register: 5 req/jam/IP |
+| Env validation | Variabel wajib divalidasi saat startup; server tidak jalan jika ada yang kosong |
 
 ## Authors
 Muammar Qathafi

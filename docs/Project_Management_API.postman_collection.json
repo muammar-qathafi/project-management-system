@@ -108,6 +108,32 @@
               ],
               "cookie": [],
               "body": "{\"success\":false,\"message\":\"Email already registered\"}"
+            },
+            {
+              "name": "429 Too Many Requests - Terlalu banyak percobaan registrasi",
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "RateLimit-Limit",
+                  "value": "5"
+                },
+                {
+                  "key": "RateLimit-Remaining",
+                  "value": "0"
+                },
+                {
+                  "key": "RateLimit-Reset",
+                  "value": "3600"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"success\":false,\"message\":\"Terlalu banyak permintaan registrasi. Coba lagi dalam 1 jam.\",\"statusCode\":429}"
             }
           ]
         },
@@ -214,6 +240,32 @@
               ],
               "cookie": [],
               "body": "{\"success\":false,\"message\":\"Account is deactivated\"}"
+            },
+            {
+              "name": "429 Too Many Requests - Terlalu banyak percobaan login",
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "RateLimit-Limit",
+                  "value": "10"
+                },
+                {
+                  "key": "RateLimit-Remaining",
+                  "value": "0"
+                },
+                {
+                  "key": "RateLimit-Reset",
+                  "value": "900"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"success\":false,\"message\":\"Terlalu banyak percobaan login. Coba lagi dalam 15 menit.\",\"statusCode\":429}"
             }
           ]
         },
