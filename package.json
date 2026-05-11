@@ -9,7 +9,8 @@
     "worker": "node src/workers/overdueWorker.js",
     "test": "jest --forceExit --detectOpenHandles",
     "test:verbose": "jest --forceExit --detectOpenHandles --verbose",
-    "test:coverage": "jest --forceExit --detectOpenHandles --coverage"
+    "test:coverage": "jest --forceExit --detectOpenHandles --coverage",
+    "test:integration": "jest --config jest.integration.config.js --runInBand"
   },
   "jest": {
     "testEnvironment": "node",
@@ -17,7 +18,8 @@
       "**/tests/**/*.test.js"
     ],
     "testPathIgnorePatterns": [
-      "/node_modules/"
+      "/node_modules/",
+      "/tests/integration/"
     ],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [

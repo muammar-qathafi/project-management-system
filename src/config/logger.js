@@ -6,7 +6,8 @@ const logsDir = path.join(__dirname, '..', '..', 'logs');
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
-const logFile = path.join(logsDir, 'app.log');
+const logFileName = process.env.NODE_ENV === 'test' ? 'app_test.log' : 'app.log';
+const logFile = path.join(logsDir, logFileName);
 
 /**
  * Centralized Logger (Pino)

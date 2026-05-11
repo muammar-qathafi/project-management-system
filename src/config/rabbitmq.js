@@ -224,6 +224,15 @@ const consumeFromQueue = async (queueName, callback) => {
     ch.consume(queueName, async (msg) => {
       if (!msg) return;
 
+      // Helper: ack dengan graceful handling jika channel sudah ditutup saat teardown
+      const safeAck = () => {
+        try {
+          ch.ack(msg);
+        } catch (e) {
+          logger.debug({ err: e }, 'ack skipped — channel already closed (teardown)');
+        }
+      };
+
       // 1. Parse JSON — pesan malformed langsung ke DLQ, tidak bisa di-retry
       let content;
       try {
@@ -231,7 +240,7 @@ const consumeFromQueue = async (queueName, callback) => {
       } catch (parseError) {
         logger.error({ rawMessage: msg.content.toString() }, 'Malformed JSON, routing to DLQ');
         _publishToDLQ(ch, msg.content, `JSON parse error: ${parseError.message}`);
-        ch.ack(msg);
+        safeAck();
         return;
       }
 
@@ -240,19 +249,19 @@ const consumeFromQueue = async (queueName, callback) => {
       try {
         // 2. Proses pesan — callback melempar error jika gagal
         await callback(content);
-        ch.ack(msg); // sukses
+        safeAck(); // sukses
       } catch (error) {
         const isPermanent = error instanceof PermanentError;
 
         if (isPermanent || retryCount >= MAX_RETRIES) {
           // 3a. Kegagalan permanen atau retry habis → DLQ
           _publishToDLQ(ch, msg.content, error.message, retryCount);
-          ch.ack(msg);
+          safeAck();
         } else {
           // 3b. Kegagalan transien (DB mati, network error, dsb) → RETRY_QUEUE
           const nextCount = retryCount + 1;
           _publishToRetry(ch, { ...content, _retryCount: nextCount }, nextCount);
-          ch.ack(msg);
+          safeAck();
         }
       }
     });
@@ -263,11 +272,23 @@ const consumeFromQueue = async (queueName, callback) => {
 
 const closeRabbitMQ = async () => {
   try {
-    if (channel)    await channel.close();
-    if (connection) await connection.close();
-    logger.info('RabbitMQ connection closed');
+    // Hapus listeners sebelum close agar tidak memicu auto-reconnect
+    if (connection) {
+      connection.removeAllListeners('close');
+      connection.removeAllListeners('error');
+      // connection.close() otomatis menutup semua channel — tidak perlu channel.close()
+      // Memanggil channel.close() lalu connection.close() menyebabkan
+      // IllegalOperationError karena connection menutup channel sebelum
+      // close-ok handshake channel selesai.
+      await connection.close();
+    }
   } catch (error) {
-    logger.error({ err: error }, 'closeRabbitMQ error');
+    // Abaikan error saat shutdown — kita sedang teardown
+    logger.debug({ err: error }, 'closeRabbitMQ error (ignored)');
+  } finally {
+    connection = null;
+    channel = null;
+    logger.info('RabbitMQ connection closed');
   }
 };
 
