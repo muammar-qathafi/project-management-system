@@ -219,8 +219,10 @@ npm run worker
 | GET | `/api/tasks` | Daftar task dengan pagination & filter | ✓ |
 | GET | `/api/tasks/:id` | Detail task | ✓ |
 | GET | `/api/tasks/tree?project_id=1` | Task tree per project | ✓ |
-| GET | `/api/tasks/tree/all` | Semua task tree (Admin only) | Admin |
 | GET | `/api/tasks/tree/metadata` | Tree dengan statistik | ✓ |
+| GET | `/api/tasks/tree/search` | Cari task di dalam tree | ✓ |
+| GET | `/api/tasks/tree/filter` | Filter task di dalam tree | ✓ |
+| GET | `/api/tasks/tree/all` | Semua task tree (Admin only) | Admin |
 | POST | `/api/tasks` | Buat task baru | Admin / Manager |
 | PUT | `/api/tasks/:id` | Update task | Admin / Manager / Assignee |
 | DELETE | `/api/tasks/:id` | Hapus task | Admin / Manager (task assigned) |
@@ -285,6 +287,7 @@ Content-Type: application/json
 
 {
   "name": "John Doe",
+  "username": "john_doe",
   "email": "john@company.com",
   "password": "SecurePass123",
   "role": "manager"
@@ -342,11 +345,13 @@ Task mendukung hubungan parent-child tak terbatas:
 ## Scripts
 
 ```bash
-npm start             # Jalankan server production
-npm run dev           # Jalankan server development (nodemon)
-npm run worker        # Jalankan background worker
-npm test              # Jalankan semua unit test
-npm run test:coverage # Jalankan test + laporan coverage
+npm start                  # Jalankan server production
+npm run dev                # Jalankan server development (nodemon)
+npm run worker             # Jalankan background worker
+npm test                   # Jalankan semua unit test
+npm run test:verbose       # Jalankan unit test dengan output verbose
+npm run test:coverage      # Jalankan unit test + laporan coverage
+npm run test:integration   # Jalankan integration test (butuh Docker services aktif)
 ```
 
 ## Security
@@ -624,6 +629,48 @@ Time:        ~1.4 s
 | Circular reference | Validasi mencegah task menjadi parent dari leluhurnya sendiri | ✅ |
 | JWT Blacklist | Logout → token diblacklist di Redis dengan TTL sisa | ✅ |
 | Role injection | Registrasi publik selalu menghasilkan role `staff` (tidak bisa inject admin) | ✅ |
+
+---
+
+## Integration Testing
+
+### Menjalankan Integration Test
+
+> Membutuhkan Docker services (MySQL, Redis, RabbitMQ) aktif sebelum dijalankan.
+
+```bash
+# Pastikan services Docker sudah berjalan
+docker compose up -d
+
+# Jalankan integration test (berjalan secara serial, ~12 menit total)
+npm run test:integration
+```
+
+### Struktur Integration Test
+
+```
+tests/
+└── integration/
+    ├── overdue.integration.test.js   # Siklus penuh RabbitMQ DLX → overdue worker
+    └── e2e.flow.test.js              # Simulasi penuh Postman collection (6 fase)
+```
+
+### Hasil Integration Test (59/59 Lulus)
+
+```
+Test Suites: 2 passed, 2 total
+Tests:       59 passed, 59 total
+Snapshots:   0 total
+Time:        ~716 s
+```
+
+| Suite | Tests | Cakupan |
+|---|---|---|
+| `overdue.integration.test.js` | 1 | Siklus penuh RabbitMQ DLX → DB status overdue |
+| `e2e.flow.test.js` | 58 | Auth, User CRUD, Project CRUD, Task CRUD+Tree, Overdue Worker, Security |
+| **Total** | **59** | |
+
+> **Catatan:** Integration test `e2e.flow.test.js` fase overdue (~300 detik) menunggu RabbitMQ DLX TTL habis secara nyata. Jika mesin mengalami sleep/hibernate selama test berjalan, timeout otomatis diperpanjang hingga 420 detik sebagai buffer.
 
 ---
 

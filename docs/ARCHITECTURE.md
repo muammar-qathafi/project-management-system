@@ -304,7 +304,7 @@ Queue yang digunakan:
 ```javascript
 router.delete('/tasks/:id', 
   authenticateToken,  // Verify user is logged in
-  isAdmin,            // Check if staff has admin role
+  canDeleteTask,      // Admin: semua task; Manager: task milik sendiri; Staff: ditolak
   taskController.deleteTask
 );
 ```
@@ -337,19 +337,36 @@ throw error;
 7. ✅ **Scalability**: Stateless architecture with external cache
 8. ✅ **Maintainability**: Clear structure and documentation
 
-## Testing Strategy (To Implement)
+## Testing
 
+### Unit Tests (89/89 Lulus)
+
+```bash
+npm test                   # Jalankan semua unit test
+npm run test:verbose       # Output verbose
+npm run test:coverage      # Dengan laporan coverage
 ```
-Unit Tests:
-- Service layer logic
-- Utility functions
-- Middleware validation
 
-Integration Tests:
-- Repository database operations
-- Controller HTTP endpoints
+| Suite | Tests | Cakupan |
+|---|---|---|
+| `treeHelper.test.js` | 14 | buildTaskTree, getTreeStatistics, getDescendantIds, circular reference, search, filter |
+| `responseHandler.test.js` | 6 | successResponse, errorResponse, paginationResponse |
+| `authService.test.js` | 10 | Register (role injection prevention), Login, Logout blacklist, Profile |
+| `projectService.test.js` | 16 | CRUD, Assignment constraint (Manager only), Cache invalidation |
+| `taskService.test.js` | 21 | CRUD, Tree view, Email notification, RabbitMQ delay, Cache invalidation |
+| `roleMiddleware.test.js` | 30 | RBAC Admin/Manager/Staff untuk Project & Task, isAdminOrSelf |
+| **Total** | **89** | |
 
-E2E Tests:
-- Full API workflows
-- Authentication flows
+### Integration Tests (59/59 Lulus)
+
+```bash
+# Membutuhkan Docker services aktif
+docker compose up -d
+npm run test:integration   # Berjalan serial, ~12 menit total
 ```
+
+| Suite | Tests | Cakupan |
+|---|---|---|
+| `overdue.integration.test.js` | 1 | Siklus penuh RabbitMQ DLX → DB status overdue |
+| `e2e.flow.test.js` | 58 | Auth, User CRUD, Project CRUD, Task CRUD+Tree, Overdue Worker, Security |
+| **Total** | **59** | |

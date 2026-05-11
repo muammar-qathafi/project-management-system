@@ -58,7 +58,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Manager\",\n  \"email\": \"manager@example.com\",\n  \"password\": \"Manager123!\",\n  \"role\": \"manager\"\n}",
+              "raw": "{\n  \"name\": \"John Manager\",\n  \"username\": \"john_manager\",\n  \"email\": \"manager@example.com\",\n  \"password\": \"Manager123!\",\n  \"phone_number\": \"+6281234567890\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -79,7 +79,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"success\":true,\"message\":\"Registration successful\",\"data\":{\"id\":10,\"name\":\"John Manager\",\"email\":\"manager@example.com\",\"role\":\"staff\",\"is_active\":true,\"created_at\":\"2026-05-08T10:00:00.000Z\"}}"
+              "body": "{\"success\":true,\"statusCode\":201,\"message\":\"User registered successfully\",\"data\":{\"user\":{\"id\":10,\"name\":\"John Manager\",\"username\":\"john_manager\",\"email\":\"manager@example.com\",\"phone_number\":\"+6281234567890\",\"role\":\"staff\",\"is_active\":true,\"created_at\":\"2026-05-08T10:00:00.000Z\",\"updated_at\":\"2026-05-08T10:00:00.000Z\"},\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTAsInJvbGUiOiJzdGFmZiIsImlhdCI6MTc0NjcwMDAwMCwiZXhwIjoxNzQ2Nzg2NDAwfQ.signature\"}}"
             },
             {
               "name": "400 Bad Request – Validasi gagal",
@@ -93,12 +93,12 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"email\",\"message\":\"Invalid email format\"},{\"field\":\"password\",\"message\":\"Password must be at least 8 characters\"}]}"
+              "body": "{\"success\":false,\"statusCode\":400,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"username\",\"message\":\"Username is required\"},{\"field\":\"email\",\"message\":\"Invalid email format\"},{\"field\":\"password\",\"message\":\"Password must be at least 6 characters\"}]}"
             },
             {
-              "name": "409 Conflict – Email sudah terdaftar",
-              "status": "Conflict",
-              "code": 409,
+              "name": "400 Bad Request – Email sudah terdaftar",
+              "status": "Bad Request",
+              "code": 400,
               "_postman_previewlanguage": "json",
               "header": [
                 {
@@ -107,7 +107,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"success\":false,\"message\":\"Email already registered\"}"
+              "body": "{\"success\":false,\"statusCode\":400,\"message\":\"Email already registered\"}"
             },
             {
               "name": "429 Too Many Requests - Terlalu banyak percobaan registrasi",
@@ -651,7 +651,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Staff Budi\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"Budi1234!\",\n  \"role\": \"staff\"\n}",
+              "raw": "{\n  \"name\": \"Staff Budi\",\n  \"username\": \"staff_budi\",\n  \"email\": \"budi@example.com\",\n  \"password\": \"Budi1234!\",\n  \"phone_number\": \"+6281234567891\",\n  \"role\": \"staff\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -672,7 +672,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"success\":true,\"message\":\"User created successfully\",\"data\":{\"id\":11,\"name\":\"Staff Budi\",\"email\":\"budi@example.com\",\"role\":\"staff\",\"is_active\":true,\"created_at\":\"2026-05-08T10:00:00.000Z\"}}"
+              "body": "{\"success\":true,\"statusCode\":201,\"message\":\"User created successfully\",\"data\":{\"id\":11,\"name\":\"Staff Budi\",\"username\":\"staff_budi\",\"email\":\"budi@example.com\",\"phone_number\":\"+6281234567891\",\"role\":\"staff\",\"is_active\":true,\"created_at\":\"2026-05-08T10:00:00.000Z\",\"updated_at\":\"2026-05-08T10:00:00.000Z\"}}"
             },
             {
               "name": "400 Bad Request – Validasi gagal",
@@ -978,7 +978,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Project Alpha\",\n  \"description\": \"Proyek pertama untuk testing RBAC dan caching\",\n  \"status\": \"active\"\n}",
+              "raw": "{\n  \"name\": \"Project Alpha\",\n  \"description\": \"Proyek pertama untuk testing RBAC dan caching\",\n  \"status\": \"active\",\n  \"owner_id\": 2\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1482,7 +1482,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"status\",\"message\":\"Invalid status. Must be: open, working, review, closed, overdue\"}]}"
+              "body": "{\"success\":false,\"message\":\"Validation failed\",\"errors\":[{\"field\":\"status\",\"message\":\"Invalid status. Allowed: open, working, closed, overdue\"}]}"
             },
             {
               "name": "401 Unauthorized – Token tidak ada",
