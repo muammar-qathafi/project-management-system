@@ -21,7 +21,8 @@ REST API backend untuk sistem manajemen proyek dan task. Dibangun dengan arsitek
 ```
 project-management-system/
 ├── src/
-│   ├── config/          # database, redis, rabbitmq, mailer
+│   ├── app.js           # Express app setup (middleware, routes)
+│   ├── config/          # database, redis, rabbitmq, mailer, logger
 │   ├── controllers/     # HTTP request/response handlers
 │   ├── services/        # Business logic
 │   ├── repositories/    # Data access layer (DB queries)
@@ -31,7 +32,13 @@ project-management-system/
 │   ├── workers/         # RabbitMQ consumers (background jobs)
 │   └── utils/           # responseHandler, treeHelper
 ├── migrations/          # SQL migration files
-├── docs/                # Postman collection & API docs
+│   └── README.md        # Panduan menjalankan migrasi manual
+├── docs/
+│   ├── ARCHITECTURE.md                        # Diagram & penjelasan arsitektur
+│   ├── QUICK_START.md                         # Panduan setup cepat
+│   └── Project_Management_API.postman_collection.json
+├── docker-compose.yml   # MySQL, Redis, RabbitMQ container setup
+├── package.json         # Dependencies & npm scripts
 ├── .env.example         # Environment variable template
 └── server.js            # Entry point
 ```
