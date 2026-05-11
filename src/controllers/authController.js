@@ -16,9 +16,9 @@ class AuthController {
     try {
       // [SEC-FIX-1] role is intentionally excluded — authService enforces 'staff' for all
       // public registrations. Only an Admin can assign elevated roles via /api/users.
-      const { name, email, password } = req.body;
+      const { name, username, email, password, phone_number } = req.body;
 
-      const result = await authService.register({ name, email, password });
+      const result = await authService.register({ name, username, email, password, phone_number });
 
       return res.status(201).json(
         successResponse(result, 'User registered successfully', 201)

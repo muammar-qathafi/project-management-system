@@ -1,4 +1,12 @@
 const pino = require('pino');
+const path = require('path');
+const fs = require('fs');
+
+const logsDir = path.join(__dirname, '..', '..', 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+const logFile = path.join(logsDir, 'app.log');
 
 /**
  * Centralized Logger (Pino)
@@ -38,13 +46,11 @@ const logger = pino({
   // pino-pretty hanya aktif di non-production
   transport: process.env.NODE_ENV !== 'production'
     ? {
-        target: 'pino-pretty',
-        options: {
-          colorize:      true,
-          translateTime: 'HH:MM:ss',
-          ignore:        'pid,hostname,service,env'
-        }
-      }
+      targets: [
+        { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:yyyy-mm-dd HH:MM:ss', ignore: 'pid,hostname,service,env' } },
+        { target: 'pino-pretty', options: { colorize: false, translateTime: 'SYS:yyyy-mm-dd HH:MM:ss', ignore: 'pid,hostname,service,env', destination: logFile } }
+      ]
+    }
     : undefined
 });
 

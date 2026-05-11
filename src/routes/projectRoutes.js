@@ -25,11 +25,32 @@ const { handleValidationErrors } = require('../middlewares/validatorMiddleware')
  *  DELETE /:id       → Admin only
  */
 
-// Validasi project create/update
-const validateProject = [
+// Validasi project create (owner_id wajib — harus Manager)
+const validateCreateProject = [
   body('name')
     .trim()
     .notEmpty().withMessage('Project name is required')
+    .isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
+  body('owner_id')
+    .notEmpty().withMessage('owner_id is required')
+    .isInt({ min: 1 }).withMessage('owner_id must be a valid user ID'),
+  body('description').optional().trim(),
+  body('status')
+    .optional()
+    .isIn(['planning', 'active', 'on_hold', 'completed', 'cancelled']).withMessage('Invalid status'),
+  body('priority')
+    .optional()
+    .isIn(['low', 'medium', 'high']).withMessage('Invalid priority. Allowed: low, medium, high'),
+  body('start_date').optional().isISO8601().withMessage('Invalid start date format'),
+  body('end_date').optional().isISO8601().withMessage('Invalid end date format'),
+  handleValidationErrors
+];
+
+// Validasi project update (owner_id tidak wajib)
+const validateProject = [
+  body('name')
+    .optional()
+    .trim()
     .isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
   body('description').optional().trim(),
   body('status')
@@ -47,7 +68,7 @@ router.get('/', authenticateToken, validatePagination, projectController.getAllP
 
 router.get('/:id', authenticateToken, validateId, projectController.getProjectById);
 
-router.post('/', authenticateToken, canCreateProject, validateProject, projectController.createProject);
+router.post('/', authenticateToken, canCreateProject, validateCreateProject, projectController.createProject);
 
 router.put('/:id', authenticateToken, validateId, canUpdateProject, validateProject, projectController.updateProject);
 

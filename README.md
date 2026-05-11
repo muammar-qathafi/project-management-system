@@ -362,6 +362,271 @@ npm run test:coverage # Jalankan test + laporan coverage
 | Rate limiting | Login: 10 percobaan gagal/15 menit/IP — Register: 5 req/jam/IP |
 | Env validation | Variabel wajib divalidasi saat startup; server tidak jalan jika ada yang kosong |
 
+## Hasil Simulasi Running Project (11 Mei 2026)
+
+Simulasi dilakukan di lingkungan Windows 11 menggunakan Docker Desktop v29.4.1, Docker Compose v5.1.3, dan VS Code.
+
+### Ringkasan Hasil
+
+| # | Langkah | Status | Keterangan |
+|---|---|---|---|
+| 1 | Docker tersedia | ✅ Berhasil | Docker v29.4.1 + Compose v5.1.3 terinstall |
+| 2 | Docker daemon berjalan | ❌ **Gagal (awal)** | Docker Desktop belum dijalankan |
+| 3 | `docker compose up -d` | ✅ Berhasil (setelah fix) | Semua container berhasil dijalankan |
+| 4 | MySQL — database & tabel | ✅ Berhasil | Auto-migrasi via `docker-entrypoint-initdb.d` |
+| 5 | MySQL — sample data | ✅ Berhasil | 4 user + project + task ter-insert |
+| 6 | Redis — koneksi | ✅ Berhasil | `redis-cli ping` → `PONG` |
+| 7 | RabbitMQ — koneksi & user | ✅ Berhasil | User `admin` terdaftar sebagai administrator |
+| 8 | Node.js tersedia | ❌ **Gagal** | Node.js tidak terinstall di sistem |
+| 9 | `npm install` | ❌ **Gagal** | Bergantung pada Node.js |
+| 10 | `npm run dev` (server) | ❌ **Gagal** | Bergantung pada Node.js |
+| 11 | Mailer verify (startup) | ⚠️ Non-fatal | Jika email placeholder, log error tapi server tetap jalan |
+
+---
+
+### Kegagalan & Solusi
+
+#### ❌ Kegagalan 1 — Docker Desktop tidak berjalan
+
+**Error:**
+```
+unable to get image 'redis:alpine': failed to connect to the docker API at
+npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and
+if the daemon is running: open //./pipe/dockerDesktopLinuxEngine:
+The system cannot find the file specified.
+```
+
+**Penyebab:** Docker Desktop terinstall tetapi belum dijalankan. Daemon Linux engine belum aktif.
+
+**Solusi:**
+1. Buka aplikasi **Docker Desktop** dari Start Menu atau system tray
+2. Tunggu sampai ikon Docker di system tray berhenti berputar (status: *Engine running*)
+3. Verifikasi daemon aktif: `docker info`
+4. Baru jalankan `docker compose up -d`
+
+> Alternatif: Aktifkan Docker Desktop agar auto-start saat Windows booting via *Settings → General → Start Docker Desktop when you sign in*.
+
+---
+
+#### ❌ Kegagalan 2 — Node.js tidak terinstall
+
+**Error:**
+```
+node : The term 'node' is not recognized as the name of a cmdlet, function,
+script file, or operable program.
+```
+
+**Penyebab:** Node.js tidak terinstall atau tidak ada di sistem `PATH`. Tanpa Node.js, perintah `npm install`, `npm run dev`, dan `npm run worker` tidak dapat dijalankan.
+
+**Solusi:**
+1. Download installer Node.js LTS (>= 18.x) dari https://nodejs.org
+2. Jalankan installer dan **centang opsi "Add to PATH"**
+3. Restart terminal (atau restart VS Code) agar PATH diperbarui
+4. Verifikasi: `node --version` dan `npm --version`
+5. Jalankan `npm install` di direktori project
+
+```bash
+# Setelah Node.js terinstall
+node --version   # harus >= v18.x
+npm --version
+npm install
+npm run dev
+```
+
+> Alternatif tanpa install lokal: gunakan Node.js via Docker container yang di-mount ke source code project (lihat contoh di bawah).
+
+```bash
+# Alternatif: jalankan server via Docker tanpa install Node.js lokal
+docker run --rm -it \
+  --network host \
+  -v "${PWD}:/app" \
+  -w /app \
+  --env-file .env \
+  node:18-alpine \
+  sh -c "npm install && npm run dev"
+```
+
+---
+
+#### ❌ Kegagalan 3 — Konflik nama container saat `docker compose up -d` dijalankan ulang
+
+**Error:**
+```
+Conflict. The container name "/project_mgmt_mysql" is already in use by container
+"956bafd7...". You have to remove (or rename) that container to be able to reuse that name.
+```
+
+**Penyebab:** Container dari sesi sebelumnya (status: *stopped*) masih ada dengan nama yang sama. Terjadi jika `docker compose up -d` dijalankan ulang tanpa terlebih dahulu menjalankan `docker compose down`.
+
+**Solusi:**
+```bash
+# Hentikan dan hapus semua container lama terlebih dahulu
+docker compose down
+
+# Kemudian baru jalankan ulang
+docker compose up -d
+```
+
+Atau jika hanya satu container yang konflik:
+```bash
+docker rm -f project_mgmt_mysql
+docker compose up -d
+```
+
+---
+
+#### ⚠️ Peringatan 1 — `RABBITMQ_URL` di `.env.example` tidak menyertakan kredensial
+
+**Isu:** File `.env.example` mengandung:
+```
+RABBITMQ_URL=amqp://localhost:5672
+```
+
+Sementara `docker-compose.yml` mengkonfigurasi user khusus `admin`/`admin123`. Jika `.env.example` disalin tanpa modifikasi, koneksi menggunakan default `guest`/`guest` RabbitMQ yang hanya bisa dari localhost (masih bisa berjalan), tetapi tidak konsisten dengan user yang dikonfigurasi di docker-compose.
+
+**Solusi:** Setelah `cp .env.example .env`, pastikan `RABBITMQ_URL` diubah menjadi:
+```env
+RABBITMQ_URL=amqp://admin:admin123@localhost:5672
+```
+
+---
+
+#### ⚠️ Peringatan 2 — Mailer verification gagal saat startup (non-fatal)
+
+**Isu:** Jika `MAIL_USER` dan `MAIL_PASSWORD` masih berupa placeholder (nilai dari `.env.example`), fungsi `verifyMailer()` di `server.js` akan gagal saat startup. Namun server **tetap berjalan** karena error hanya di-log, tidak melempar exception.
+
+**Dampak:** Fitur notifikasi email (task overdue, dll.) tidak berfungsi. Worker akan tetap memproses antrian, tetapi pengiriman email gagal.
+
+**Solusi untuk development:** Gunakan [Ethereal Email](https://ethereal.email) (SMTP testing palsu, tidak mengirim email sungguhan):
+```env
+MAIL_HOST=smtp.ethereal.email
+MAIL_PORT=587
+MAIL_SECURE=false
+MAIL_USER=<user_dari_ethereal>
+MAIL_PASSWORD=<password_dari_ethereal>
+```
+
+**Solusi untuk production:** Gunakan Gmail App Password:
+1. Aktifkan 2FA di akun Google
+2. Buka https://myaccount.google.com/apppasswords
+3. Buat App Password baru → gunakan sebagai `MAIL_PASSWORD`
+
+---
+
+### Checklist Lengkap Sebelum Menjalankan Project
+
+```
+[ ] Docker Desktop terinstall dan sudah dijalankan (daemon aktif)
+[ ] Node.js >= 18.x terinstall dan ada di PATH
+[ ] File .env sudah dibuat dari .env.example dan semua nilai diisi
+[ ] RABBITMQ_URL menggunakan format: amqp://admin:admin123@localhost:5672
+[ ] JWT_SECRET minimal 32 karakter (bukan placeholder)
+[ ] docker compose up -d berhasil dan semua container berstatus "healthy"
+[ ] npm install berhasil tanpa error
+[ ] npm run dev berjalan dan server merespons di http://localhost:3000/health
+[ ] npm run worker dijalankan di terminal terpisah
+```
+
+---
+
+## Unit Testing
+
+### Menjalankan Test
+
+```bash
+# Jalankan semua test
+npm test
+
+# Jalankan dengan output verbose (nama setiap test case ditampilkan)
+npm run test:verbose
+
+# Jalankan dengan laporan code coverage
+npm run test:coverage
+```
+
+### Struktur Test
+
+```
+tests/
+└── unit/
+    ├── utils/
+    │   ├── responseHandler.test.js    # Format respons API
+    │   └── treeHelper.test.js         # Utilitas tree rekursif
+    ├── services/
+    │   ├── authService.test.js        # IAM: register, login, logout, profile
+    │   ├── projectService.test.js     # CRUD project + constraint assignment
+    │   └── taskService.test.js        # CRUD task + email + RabbitMQ + cache
+    └── middlewares/
+        └── roleMiddleware.test.js     # RBAC semua role × semua operasi
+```
+
+### Hasil Test (89/89 Lulus)
+
+```
+Test Suites: 6 passed, 6 total
+Tests:       89 passed, 89 total
+Snapshots:   0 total
+Time:        ~1.4 s
+```
+
+### Rincian Per Suite
+
+| Suite | Tests | Cakupan |
+|---|---|---|
+| `treeHelper.test.js` | 14 | buildTaskTree, getTreeStatistics, getDescendantIds, validateNoCircularReference, searchInTree, filterTree |
+| `responseHandler.test.js` | 6 | successResponse, errorResponse, paginationResponse |
+| `authService.test.js` | 10 | Register (role injection prevention), Login, Logout blacklist, Profile |
+| `projectService.test.js` | 16 | CRUD, Assignment hanya ke Manager, Cache invalidation |
+| `taskService.test.js` | 21 | CRUD, Tree view, Email notification, RabbitMQ delay, Cache invalidation |
+| `roleMiddleware.test.js` | 30 | RBAC Admin/Manager/Staff untuk Project & Task, isAdminOrSelf |
+| **Total** | **89** | |
+
+### Skenario RBAC yang Diuji
+
+**Project (sesuai soal: dibuat Admin, di-assign ke Manager):**
+
+| Operasi | Admin | Manager | Staff |
+|---|---|---|---|
+| CREATE project | ✅ Boleh | ❌ 403 | ❌ 403 |
+| READ project | ✅ Semua | ✅ Milik sendiri | ❌ 403 |
+| UPDATE project | ✅ Boleh | ✅ Boleh | ❌ 403 |
+| DELETE project | ✅ Boleh | ❌ 403 | ❌ 403 |
+
+**Assignment Constraint (sesuai soal):**
+
+| Kondisi | Hasil |
+|---|---|
+| `owner_id` → user role **Manager** | ✅ 201 Created |
+| `owner_id` → user role **Admin** | ❌ 400: "Project can only be assigned to a user with role Manager" |
+| `owner_id` → user role **Staff** | ❌ 400: "Project can only be assigned to a user with role Manager" |
+| `owner_id` tidak disertakan | ❌ 400: "owner_id is required" |
+
+**Task:**
+
+| Operasi | Admin | Manager | Staff |
+|---|---|---|---|
+| CREATE task | ✅ Boleh | ✅ Boleh | ❌ 403 |
+| UPDATE task | ✅ Semua | ✅ Milik sendiri | ✅ Milik sendiri |
+| DELETE task | ✅ Semua | ✅ Milik sendiri | ❌ 403 |
+
+### Skenario Lanjutan yang Diuji
+
+| Fitur | Skenario | Hasil |
+|---|---|---|
+| Cache Redis | CACHE HIT — data dikembalikan dari cache | ✅ |
+| Cache Redis | CACHE MISS — data diambil dari DB, lalu disimpan ke cache | ✅ |
+| Cache invalidation | Update/Delete project → cache di-clear | ✅ |
+| Cache invalidation | Update task → write-through `task:{id}` + hapus `tasks:tree:{projectId}` | ✅ |
+| RabbitMQ | `scheduleOverdue()` dipanggil saat task dibuat dengan `due_date` | ✅ |
+| Email | `sendTaskAssignmentEmail()` dikirim saat `assigned_to` di-set/berubah | ✅ |
+| Overdue automation | `checkOverdueTasks()` ubah status → overdue + kirim ke queue | ✅ |
+| Tree rekursif | Struktur parent→child unlimited depth (diuji hingga 5 level) | ✅ |
+| Circular reference | Validasi mencegah task menjadi parent dari leluhurnya sendiri | ✅ |
+| JWT Blacklist | Logout → token diblacklist di Redis dengan TTL sisa | ✅ |
+| Role injection | Registrasi publik selalu menghasilkan role `staff` (tidak bisa inject admin) | ✅ |
+
+---
+
 ## Authors
 Muammar Qathafi
 

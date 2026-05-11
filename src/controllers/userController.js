@@ -62,7 +62,7 @@ class UserController {
    */
   async createUser(req, res, next) {
     try {
-      const { name, email, password, role = 'staff' } = req.body;
+      const { name, username, email, password, phone_number, role = 'staff' } = req.body;
 
       // Cek apakah email sudah dipakai
       const existingUser = await userRepository.findByEmail(email);
@@ -70,7 +70,7 @@ class UserController {
         return res.status(409).json(errorResponse('Email already in use', 409));
       }
 
-      const user = await userRepository.create({ name, email, password, role });
+      const user = await userRepository.create({ name, username, email, password, phone_number, role });
 
       const { password: _, ...userWithoutPassword } = user.toJSON();
 

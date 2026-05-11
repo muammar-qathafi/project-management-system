@@ -1,6 +1,7 @@
 const projectService = require('../services/projectService');
 const { successResponse, errorResponse, paginationResponse } = require('../utils/responseHandler');
 
+
 /**
  * Project Controller
  * Handle HTTP requests untuk project management
@@ -62,13 +63,20 @@ class ProjectController {
   /**
    * Create new project
    * POST /api/projects
+   * Admin harus menyertakan owner_id yang menunjuk ke user dengan role Manager.
    */
   async createProject(req, res, next) {
     try {
       const projectData = req.body;
-      const ownerId = req.user.id;
+      const createdBy = req.user.id;
 
-      const project = await projectService.createProject({ ...projectData, owner_id: ownerId });
+      if (!projectData.owner_id) {
+        return res.status(400).json(
+          errorResponse('owner_id is required. Project must be assigned to a Manager.', 400)
+        );
+      }
+
+      const project = await projectService.createProject({ ...projectData, created_by: createdBy });
 
       return res.status(201).json(
         successResponse(project, 'Project created successfully', 201)

@@ -46,10 +46,10 @@ class ProjectService {
 
   /**
    * Create new project
-   * owner_id harus user dengan role Manager (sesuai requirement)
+   * owner_id harus user dengan role Manager atau Admin (sesuai RBAC requirement)
    */
   async createProject(projectData) {
-    // Validasi owner_id harus role manager
+    // Validasi owner_id harus role manager atau admin
     if (projectData.owner_id) {
       const owner = await User.findByPk(projectData.owner_id);
       if (!owner) {
@@ -57,6 +57,7 @@ class ProjectService {
         error.statusCode = 404;
         throw error;
       }
+      // Spec: project hanya dapat di-assign ke user dengan role Manager
       if (owner.role !== 'manager') {
         const error = new Error('Project can only be assigned to a user with role Manager');
         error.statusCode = 400;
