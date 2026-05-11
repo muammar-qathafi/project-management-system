@@ -35,6 +35,9 @@ const validateProject = [
   body('status')
     .optional()
     .isIn(['planning', 'active', 'on_hold', 'completed', 'cancelled']).withMessage('Invalid status'),
+  body('priority')
+    .optional()
+    .isIn(['low', 'medium', 'high']).withMessage('Invalid priority. Allowed: low, medium, high'),
   body('start_date').optional().isISO8601().withMessage('Invalid start date format'),
   body('end_date').optional().isISO8601().withMessage('Invalid end date format'),
   handleValidationErrors

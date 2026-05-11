@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name VARCHAR(200) NOT NULL,
     description TEXT,
     status ENUM('planning', 'active', 'on_hold', 'completed', 'cancelled') DEFAULT 'planning',
+    priority ENUM('low', 'medium', 'high') DEFAULT 'medium',
     start_date DATE,
     end_date DATE,
     owner_id INT NOT NULL,
@@ -13,5 +14,6 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_status (status),
+    INDEX idx_priority (priority),
     INDEX idx_owner (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

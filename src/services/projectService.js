@@ -1,5 +1,6 @@
 const projectRepository = require('../repositories/projectRepository');
 const { cacheHelper } = require('../config/redis');
+const User = require('../models/user');
 
 /**
  * Project Service
@@ -45,8 +46,24 @@ class ProjectService {
 
   /**
    * Create new project
+   * owner_id harus user dengan role Manager (sesuai requirement)
    */
   async createProject(projectData) {
+    // Validasi owner_id harus role manager
+    if (projectData.owner_id) {
+      const owner = await User.findByPk(projectData.owner_id);
+      if (!owner) {
+        const error = new Error('Assigned user not found');
+        error.statusCode = 404;
+        throw error;
+      }
+      if (owner.role !== 'manager') {
+        const error = new Error('Project can only be assigned to a user with role Manager');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
     return await projectRepository.create(projectData);
   }
 

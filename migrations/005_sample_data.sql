@@ -5,18 +5,18 @@
 -- 1. Insert Sample Users
 -- ============================================
 -- Password untuk semua user: password123
-INSERT INTO users (name, email, password, role) VALUES
-('Admin User', 'admin@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'admin'),
-('John Manager', 'john.manager@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'manager'),
-('Alice Developer', 'alice@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'staff'),
-('Bob Developer', 'bob@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', 'staff');
+INSERT INTO users (name, username, email, password, phone_number, role) VALUES
+('Admin User', 'admin', 'admin@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', '+628111000001', 'admin'),
+('John Manager', 'john.manager', 'john.manager@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', '+628111000002', 'manager'),
+('Alice Developer', 'alice', 'alice@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', '+628111000003', 'staff'),
+('Bob Developer', 'bob', 'bob@example.com', '$2b$10$J.r6kXtLsjy1KESr.MdwoOtm6/zLRiHsDtK.jrFoTjJ6GFcIRIWPm', '+628111000004', 'staff');
 
 -- ============================================
 -- 2. Insert Sample Projects
 -- ============================================
-INSERT INTO projects (name, description, status, start_date, end_date, owner_id) VALUES
-('E-Commerce Platform', 'Build a full-stack e-commerce platform with payment integration', 'active', '2026-01-01', '2026-12-31', 1),
-('Mobile App', 'Develop cross-platform mobile application', 'planning', '2026-06-01', '2026-12-31', 2);
+INSERT INTO projects (name, description, status, priority, start_date, end_date, owner_id) VALUES
+('E-Commerce Platform', 'Build a full-stack e-commerce platform with payment integration', 'active', 'high', '2026-01-01', '2026-12-31', 2),
+('Mobile App', 'Develop cross-platform mobile application', 'planning', 'medium', '2026-06-01', '2026-12-31', 2);
 
 -- ============================================
 -- 3. Insert Sample Tasks with Recursive Structure

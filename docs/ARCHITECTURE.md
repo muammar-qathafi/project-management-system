@@ -170,8 +170,28 @@ const Task = sequelize.define('Task', {
 
 ## Supporting Components
 
-### Middlewares
-**Location**: `src/middlewares/`
+### App Setup (`src/app.js`)
+
+File ini merupakan Express app setup, dipisah dari `server.js` agar mudah di-test tanpa menjalankan HTTP server nyata.
+
+**Responsibilities**:
+- Daftarkan security middleware: `helmet` (HTTP headers) dan `cors`
+- Setup HTTP logger via `pino-http` — auto-log method, url, status, responseTime; health check endpoint di-skip
+- Mount body parser (`express.json`, `express.urlencoded`)
+- Expose `GET /health` endpoint
+- Mount semua routes di bawah prefix `/api`
+- 404 handler dan global error handler
+
+### Config Layer (`src/config/`)
+
+1. **database.js**: Sequelize connection setup
+2. **redis.js**: Redis client + `cacheHelper` wrapper (get, set, del, delPattern)
+3. **rabbitmq.js**: RabbitMQ channel, deklarasi exchange & queue termasuk DLX pattern
+4. **mailer.js**: Nodemailer transporter + `emailTemplates` untuk notifikasi
+5. **logger.js**: Pino logger terpusat
+   - Level: `debug` di development, `info` di production (override via `LOG_LEVEL`)
+   - Format: `pino-pretty` (berwarna) di non-production, JSON murni di production
+   - Redact otomatis field sensitif: `authorization`, `cookie`, `password`, `token`, `secret`
 
 1. **authMiddleware.js**: JWT token verification
 2. **roleMiddleware.js**: RBAC authorization
@@ -241,25 +261,44 @@ await cacheHelper.del(`task:${taskId}`);
 
 ## Background Jobs
 
-### RabbitMQ Message Flow:
+### RabbitMQ — Delay via Dead Letter Exchange (DLX):
+
 ```
-Service publishes message
+taskService.createTask / updateTask
+   │ publish ke DELAY_QUEUE
+   │ expiration = (due_date - now) ms
    ↓
-RabbitMQ Queue
+task_overdue_queue.delay   ← pesan menunggu TTL habis
+   │ setelah TTL habis, DLX otomatis memindahkan ke:
    ↓
-Worker consumes message
+task_overdue_queue         ← PROCESSING_QUEUE (dikonsumsi worker)
+   │
    ↓
-Process job (update DB, send email)
-   ↓
-Acknowledge message
+overdueWorker.handleMessage()
+   ├── Ambil task dari DB
+   ├── Jika status bukan 'closed' → ubah ke 'overdue'
+   ├── Kirim email notifikasi ke assignee
+   └── Invalidasi Redis cache
+   │
+   ↓ jika gagal & retry habis
+task_overdue_queue.dlq     ← Dead Letter Queue (gagal permanen)
 ```
+
+Queue yang digunakan:
+
+| Queue | Fungsi |
+|---|---|
+| `task_overdue_queue.delay` | Pesan tertunda (delay via DLX) |
+| `task_overdue_queue` | Antrian utama pemrosesan |
+| `task_overdue_queue.retry` | Pesan gagal menunggu retry |
+| `task_overdue_queue.dlq` | Dead Letter Queue (gagal permanen) |
 
 ## RBAC Implementation
 
 ### Role Hierarchy:
-- **Admin**: Full access
-- **Manager**: Create/Update tasks & projects
-- **User**: View tasks, update assigned tasks
+- **Admin**: Full access ke semua resource
+- **Manager**: Buat/kelola project & task, tidak bisa hapus user
+- **Staff**: Baca data, update task yang di-assign ke dirinya
 
 ### Middleware Chain:
 ```javascript

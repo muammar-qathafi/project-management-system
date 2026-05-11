@@ -26,6 +26,11 @@ const validateRegister = [
     .trim()
     .notEmpty().withMessage('Name is required')
     .isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
+  body('username')
+    .trim()
+    .notEmpty().withMessage('Username is required')
+    .isLength({ min: 3, max: 50 }).withMessage('Username must be between 3 and 50 characters')
+    .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username may only contain letters, numbers, and underscores'),
   body('email')
     .trim()
     .notEmpty().withMessage('Email is required')
@@ -34,6 +39,10 @@ const validateRegister = [
   body('password')
     .notEmpty().withMessage('Password is required')
     .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('phone_number')
+    .optional()
+    .trim()
+    .isMobilePhone().withMessage('Invalid phone number format'),
   // [SEC-FIX-1] Role is NOT accepted during public registration.
   // All self-registered accounts are created as 'staff' by authService.
   // Elevated roles can only be assigned by an Admin via PUT /api/users/:id.

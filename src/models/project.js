@@ -23,6 +23,10 @@ const Project = sequelize.define('Project', {
     type: DataTypes.ENUM('planning', 'active', 'on_hold', 'completed', 'cancelled'),
     defaultValue: 'planning'
   },
+  priority: {
+    type: DataTypes.ENUM('low', 'medium', 'high'),
+    defaultValue: 'medium'
+  },
   start_date: {
     type: DataTypes.DATE,
     allowNull: true
