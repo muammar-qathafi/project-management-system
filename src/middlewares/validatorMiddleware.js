@@ -79,7 +79,13 @@ const validateCreateTask = [
     .isIn(['low', 'medium', 'high']).withMessage('Invalid priority'),
   body('due_date')
     .optional()
-    .isISO8601().withMessage('Invalid date format'),
+    .customSanitizer((val) => {
+      if (!val) return val;
+      // Jika tidak ada timezone info (tidak ada Z atau +/-HH:MM), anggap WIB (+07:00)
+      const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(String(val).trim());
+      return hasTimezone ? val : `${String(val).trim()}+07:00`;
+    })
+    .isISO8601().withMessage('Invalid date format. Contoh: 2026-05-12T11:30:00 (WIB) atau 2026-05-12T04:30:00Z (UTC)'),
   body('parent_task_id')
     .optional()
     .isInt().withMessage('Parent task ID must be an integer'),
@@ -107,7 +113,13 @@ const validateUpdateTask = [
     .isIn(['low', 'medium', 'high']).withMessage('Invalid priority'),
   body('due_date')
     .optional()
-    .isISO8601().withMessage('Invalid date format'),
+    .customSanitizer((val) => {
+      if (!val) return val;
+      // Jika tidak ada timezone info (tidak ada Z atau +/-HH:MM), anggap WIB (+07:00)
+      const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(String(val).trim());
+      return hasTimezone ? val : `${String(val).trim()}+07:00`;
+    })
+    .isISO8601().withMessage('Invalid date format. Contoh: 2026-05-12T11:30:00 (WIB) atau 2026-05-12T04:30:00Z (UTC)'),
   handleValidationErrors
 ];
 

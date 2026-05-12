@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { consumeFromQueue, PROCESSING_QUEUE, PermanentError } = require('../config/rabbitmq');
 const { sequelize } = require('../config/database');
-const { cacheHelper } = require('../config/redis');
+const { cacheHelper, connectRedis } = require('../config/redis');
 const { sendEmail, emailTemplates } = require('../config/mailer');
 const logger = require('../config/logger').child({ component: 'worker' });
 const { Op } = require('sequelize');
@@ -33,6 +33,9 @@ class OverdueWorker {
 
       await sequelize.authenticate();
       logger.info('Database connected');
+
+      await connectRedis();
+      logger.info('Redis connected');
 
       await consumeFromQueue(PROCESSING_QUEUE, (msg) => this.handleMessage(msg));
 
